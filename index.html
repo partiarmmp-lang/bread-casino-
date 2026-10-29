@@ -4,9 +4,12 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>BREAD CASINO | Plinko</title>
+    <!-- Подключаем скрипт Telegram для авторизации -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body { background-color: #121212; color: #fff; font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 10px; overflow: hidden; }
         h1 { color: #ffcc00; font-size: 24px; margin-bottom: 5px; }
+        #userInfo { font-size: 14px; color: #aaa; margin-bottom: 5px; }
         #balance { font-size: 18px; margin-bottom: 15px; color: #00ff00; }
         canvas { background-color: #1e1e1e; border-radius: 10px; display: block; margin: 0 auto; box-shadow: 0 0 20px rgba(255, 204, 0, 0.2); }
         .controls { margin-top: 15px; }
@@ -14,34 +17,67 @@
         button { padding: 12px 24px; font-size: 16px; font-weight: bold; background-color: #ffcc00; color: #000; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px; }
         button:active { transform: scale(0.95); }
         button:disabled { background-color: #555; color: #999; cursor: not-allowed; }
+        #loginBtn { background-color: #0088cc; color: white; margin-bottom: 20px; }
     </style>
 </head>
 <body>
 
     <h1>🎰 BREAD PLINKO</h1>
-    <div id="balance">Баланс: <span id="balance-val">10.00</span> USDT</div>
+    
+    <!-- Блок авторизации -->
+    <div id="userInfo">Вы не авторизованы</div>
+    <button id="loginBtn" onclick="loginTelegram()">Войти через Telegram</button>
+
+    <div id="balance">Баланс: <span id="balance-val">0.00</span> USDT</div>
     
     <canvas id="gameCanvas" width="320" height="400"></canvas>
 
     <div class="controls">
-        <input type="number" id="betAmount" value="1" min="0.1" step="0.1">
-        <button id="dropBtn" onclick="dropBall()">Бросить</button>
+        <input type="number" id="betAmount" value="0.10" min="0.05" step="0.05">
+        <button id="dropBtn" onclick="dropBall()" disabled>Бросить</button>
     </div>
 
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         
-        // Настройки
-        let balance = 10.00; // Заглушка для теста
+        let balance = 0.00;
         let isDropping = false;
-        
-        // Физика шарика
+        let userId = null; // ID игрока из Telegram
+
+        // --- ИНИЦИАЛИЗАЦИЯ TELEGRAM ---
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+
+        function loginTelegram() {
+            // Если мы внутри Telegram, получаем данные пользователя
+            if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+                userId = tg.initDataUnsafe.user.id;
+                document.getElementById('userInfo').innerText = `Вы вошли как: ${tg.initDataUnsafe.user.first_name} (ID: ${userId})`;
+                document.getElementById('loginBtn').style.display = 'none';
+                document.getElementById('dropBtn').disabled = false;
+                
+                // ЗДЕСЬ ПОЗЖЕ БУДЕТ ЗАПРОС НА СЕРВЕР ДЛЯ ПОЛУЧЕНИЯ БАЛАНСА
+                // fetch('/api/balance', { method: 'POST', body: JSON.stringify({user_id: userId}) })
+                // .then(res => res.json()).then(data => { balance = data.balance; updateBalanceUI(); });
+                
+                // Пока ставим тестовый баланс, чтобы проверить игру
+                balance = 10.00;
+                updateBalanceUI();
+            } else {
+                alert("Пожалуйста, откройте эту игру через кнопку в боте!");
+            }
+        }
+
+        function updateBalanceUI() {
+            document.getElementById('balance-val').innerText = balance.toFixed(2);
+        }
+
+        // --- ЛОГИКА ИГРЫ ---
         let ball = { x: 160, y: 20, vx: 0, vy: 0, radius: 6 };
         let pegs = [];
         let buckets = [];
         
-        // Создаем колышки (пирамида)
         const rows = 12;
         const pegRadius = 4;
         const startY = 60;
@@ -52,68 +88,43 @@
             const numPegs = row + 3;
             const startX = 160 - (numPegs - 1) * spacingX / 2;
             for (let i = 0; i < numPegs; i++) {
-                pegs.push({
-                    x: startX + i * spacingX,
-                    y: startY + row * spacingY,
-                    radius: pegRadius
-                });
+                pegs.push({ x: startX + i * spacingX, y: startY + row * spacingY, radius: pegRadius });
             }
         }
 
-        // Множители для корзинок
         const multipliers = [10, 3, 1.5, 1, 0.5, 0.2, 0.2, 0.5, 1, 1.5, 3, 10];
         const bucketWidth = 320 / multipliers.length;
         
         for (let i = 0; i < multipliers.length; i++) {
-            buckets.push({
-                x: i * bucketWidth,
-                width: bucketWidth,
-                mult: multipliers[i]
-            });
+            buckets.push({ x: i * bucketWidth, width: bucketWidth, mult: multipliers[i] });
         }
 
-        // Отрисовка
         function draw() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            // Рисуем колышки
             ctx.fillStyle = "#aaa";
-            pegs.forEach(peg => {
-                ctx.beginPath();
-                ctx.arc(peg.x, peg.y, peg.radius, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            // Рисуем корзинки
-            buckets.forEach((b, index) => {
+            pegs.forEach(peg => { ctx.beginPath(); ctx.arc(peg.x, peg.y, peg.radius, 0, Math.PI * 2); ctx.fill(); });
+            buckets.forEach((b) => {
                 ctx.fillStyle = b.mult >= 3 ? "#ff4444" : (b.mult >= 1 ? "#ffcc00" : "#44ff44");
                 ctx.fillRect(b.x + 2, canvas.height - 30, b.width - 4, 30);
-                ctx.fillStyle = "#000";
-                ctx.font = "bold 12px Arial";
-                ctx.textAlign = "center";
+                ctx.fillStyle = "#000"; ctx.font = "bold 12px Arial"; ctx.textAlign = "center";
                 ctx.fillText("x" + b.mult, b.x + b.width / 2, canvas.height - 12);
             });
-
-            // Рисуем шарик
-            ctx.beginPath();
-            ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2);
-            ctx.fillStyle = "#ffcc00";
-            ctx.fill();
+            ctx.beginPath(); ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI * 2); ctx.fillStyle = "#ffcc00"; ctx.fill();
         }
 
-        // Логика падения
         function updatePhysics() {
             if (!isDropping) return;
 
-            ball.vy += 0.4; // Гравитация
+            // ФИЗИКА: Ускорение падения
+            ball.vy += 0.3; 
             ball.y += ball.vy;
             ball.x += ball.vx;
 
             // Отскок от стен
-            if (ball.x < ball.radius) { ball.x = ball.radius; ball.vx *= -0.8; }
-            if (ball.x > canvas.width - ball.radius) { ball.x = canvas.width - ball.radius; ball.vx *= -0.8; }
+            if (ball.x < ball.radius) { ball.x = ball.radius; ball.vx *= -0.5; }
+            if (ball.x > canvas.width - ball.radius) { ball.x = canvas.width - ball.radius; ball.vx *= -0.5; }
 
-            // Коллизия с колышками
+            // Коллизия с колышками (ИСПРАВЛЕНО: теперь не залипает)
             pegs.forEach(peg => {
                 let dx = ball.x - peg.x;
                 let dy = ball.y - peg.y;
@@ -121,12 +132,14 @@
                 let minDist = ball.radius + peg.radius;
 
                 if (distance < minDist) {
+                    // Выталкиваем шарик
                     let angle = Math.atan2(dy, dx);
-                    let force = 2;
-                    ball.vx = Math.cos(angle) * force;
-                    ball.vy = Math.sin(angle) * force;
                     ball.x = peg.x + Math.cos(angle) * minDist;
                     ball.y = peg.y + Math.sin(angle) * minDist;
+                    
+                    // Даем случайный импульс вбок и ГАРАНТИРОВАННО вниз
+                    ball.vx = (Math.random() - 0.5) * 4; 
+                    ball.vy = Math.abs(ball.vy) * 0.5 + 1; 
                 }
             });
 
@@ -141,9 +154,11 @@
                 let bet = parseFloat(document.getElementById('betAmount').value);
                 let win = bet * mult;
                 
-                // Обновляем баланс (визуально)
+                // ЗДЕСЬ ПОЗЖЕ БУДЕТ ОТПРАВКА РЕЗУЛЬТАТА НА СЕРВЕР
+                // fetch('/api/play', { method: 'POST', body: JSON.stringify({user_id: userId, bet: bet, mult: mult}) })
+
                 balance = balance - bet + win;
-                document.getElementById('balance-val').innerText = balance.toFixed(2);
+                updateBalanceUI();
                 
                 if (mult > 1) {
                     alert(`🎉 Выигрыш! Множитель x${mult}. Вы получили ${win.toFixed(2)} USDT`);
@@ -151,7 +166,6 @@
                     alert(`😢 Множитель x${mult}. Вы проиграли.`);
                 }
 
-                // Сброс шарика
                 ball = { x: 160, y: 20, vx: 0, vy: 0, radius: 6 };
                 document.getElementById('dropBtn').disabled = false;
             }
@@ -161,19 +175,16 @@
         }
 
         function dropBall() {
-            if (isDropping) return;
+            if (isDropping || !userId) return;
             let bet = parseFloat(document.getElementById('betAmount').value);
-            if (balance < bet) {
-                alert("Недостаточно средств!");
-                return;
-            }
+            if (balance < bet) { alert("Недостаточно средств!"); return; }
             isDropping = true;
             ball = { x: 160, y: 20, vx: (Math.random() - 0.5) * 2, vy: 0, radius: 6 };
             document.getElementById('dropBtn').disabled = true;
             updatePhysics();
         }
-
-        draw(); // Первичная отрисовка
+        
+        draw();
     </script>
 </body>
 </html>
