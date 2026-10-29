@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>BREAD CASINO | Plinko</title>
-    <!-- Подключаем скрипт Telegram для авторизации -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         body { background-color: #121212; color: #fff; font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 10px; overflow: hidden; }
@@ -17,18 +16,13 @@
         button { padding: 12px 24px; font-size: 16px; font-weight: bold; background-color: #ffcc00; color: #000; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px; }
         button:active { transform: scale(0.95); }
         button:disabled { background-color: #555; color: #999; cursor: not-allowed; }
-        #loginBtn { background-color: #0088cc; color: white; margin-bottom: 20px; }
     </style>
 </head>
 <body>
 
     <h1>🎰 BREAD PLINKO</h1>
-    
-    <!-- Блок авторизации -->
-    <div id="userInfo">Вы не авторизованы</div>
-    <button id="loginBtn" onclick="loginTelegram()">Войти через Telegram</button>
-
-    <div id="balance">Баланс: <span id="balance-val">0.00</span> USDT</div>
+    <div id="userInfo">Загрузка...</div>
+    <div id="balance">Баланс: <span id="balance-val">...</span> USDT</div>
     
     <canvas id="gameCanvas" width="320" height="400"></canvas>
 
@@ -38,42 +32,46 @@
     </div>
 
     <script>
+        // ЗАМЕНИ ЭТУ ССЫЛКУ НА АДРЕС ТВОЕГО СЕРВЕРА (Render / VPS)
+        const API_URL = "https://твой-сервер.onrender.com"; 
+        
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         
         let balance = 0.00;
         let isDropping = false;
-        let userId = null; // ID игрока из Telegram
+        let userId = null;
 
-        // --- ИНИЦИАЛИЗАЦИЯ TELEGRAM ---
         const tg = window.Telegram.WebApp;
         tg.ready();
+        tg.expand();
 
-        function loginTelegram() {
-            // Если мы внутри Telegram, получаем данные пользователя
-            if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-                userId = tg.initDataUnsafe.user.id;
-                document.getElementById('userInfo').innerText = `Вы вошли как: ${tg.initDataUnsafe.user.first_name} (ID: ${userId})`;
-                document.getElementById('loginBtn').style.display = 'none';
+        // --- АВТОРИЗАЦИЯ И ЗАГРУЗКА БАЛАНСА ---
+        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            userId = tg.initDataUnsafe.user.id;
+            document.getElementById('userInfo').innerText = `Игрок: ${tg.initDataUnsafe.user.first_name}`;
+            
+            // Запрашиваем баланс с сервера
+            fetch(API_URL + '/api/balance', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId })
+            })
+            .then(res => res.json())
+            .then(data => {
+                balance = data.balance || 0;
+                document.getElementById('balance-val').innerText = balance.toFixed(2);
                 document.getElementById('dropBtn').disabled = false;
-                
-                // ЗДЕСЬ ПОЗЖЕ БУДЕТ ЗАПРОС НА СЕРВЕР ДЛЯ ПОЛУЧЕНИЯ БАЛАНСА
-                // fetch('/api/balance', { method: 'POST', body: JSON.stringify({user_id: userId}) })
-                // .then(res => res.json()).then(data => { balance = data.balance; updateBalanceUI(); });
-                
-                // Пока ставим тестовый баланс, чтобы проверить игру
-                balance = 10.00;
-                updateBalanceUI();
-            } else {
-                alert("Пожалуйста, откройте эту игру через кнопку в боте!");
-            }
+            })
+            .catch(err => {
+                document.getElementById('balance-val').innerText = "Ошибка сети";
+            });
+        } else {
+            document.getElementById('userInfo').innerText = "Откройте через бота!";
+            document.getElementById('balance-val').innerText = "0.00";
         }
 
-        function updateBalanceUI() {
-            document.getElementById('balance-val').innerText = balance.toFixed(2);
-        }
-
-        // --- ЛОГИКА ИГРЫ ---
+        // --- ЛОГИКА ИГРЫ (ФИЗИКА) ---
         let ball = { x: 160, y: 20, vx: 0, vy: 0, radius: 6 };
         let pegs = [];
         let buckets = [];
@@ -114,76 +112,68 @@
 
         function updatePhysics() {
             if (!isDropping) return;
-
-            // ФИЗИКА: Ускорение падения
             ball.vy += 0.3; 
             ball.y += ball.vy;
             ball.x += ball.vx;
-
-            // Отскок от стен
             if (ball.x < ball.radius) { ball.x = ball.radius; ball.vx *= -0.5; }
             if (ball.x > canvas.width - ball.radius) { ball.x = canvas.width - ball.radius; ball.vx *= -0.5; }
-
-            // Коллизия с колышками (ИСПРАВЛЕНО: теперь не залипает)
             pegs.forEach(peg => {
-                let dx = ball.x - peg.x;
-                let dy = ball.y - peg.y;
+                let dx = ball.x - peg.x, dy = ball.y - peg.y;
                 let distance = Math.sqrt(dx * dx + dy * dy);
-                let minDist = ball.radius + peg.radius;
-
-                if (distance < minDist) {
-                    // Выталкиваем шарик
+                if (distance < ball.radius + peg.radius) {
                     let angle = Math.atan2(dy, dx);
-                    ball.x = peg.x + Math.cos(angle) * minDist;
-                    ball.y = peg.y + Math.sin(angle) * minDist;
-                    
-                    // Даем случайный импульс вбок и ГАРАНТИРОВАННО вниз
+                    ball.x = peg.x + Math.cos(angle) * (ball.radius + peg.radius);
+                    ball.y = peg.y + Math.sin(angle) * (ball.radius + peg.radius);
                     ball.vx = (Math.random() - 0.5) * 4; 
                     ball.vy = Math.abs(ball.vy) * 0.5 + 1; 
                 }
             });
-
-            // Достижение дна
             if (ball.y > canvas.height - 30) {
                 isDropping = false;
-                let bucketIndex = Math.floor(ball.x / bucketWidth);
-                if (bucketIndex < 0) bucketIndex = 0;
-                if (bucketIndex >= buckets.length) bucketIndex = buckets.length - 1;
-                
-                let mult = buckets[bucketIndex].mult;
-                let bet = parseFloat(document.getElementById('betAmount').value);
-                let win = bet * mult;
-                
-                // ЗДЕСЬ ПОЗЖЕ БУДЕТ ОТПРАВКА РЕЗУЛЬТАТА НА СЕРВЕР
-                // fetch('/api/play', { method: 'POST', body: JSON.stringify({user_id: userId, bet: bet, mult: mult}) })
-
-                balance = balance - bet + win;
-                updateBalanceUI();
-                
-                if (mult > 1) {
-                    alert(`🎉 Выигрыш! Множитель x${mult}. Вы получили ${win.toFixed(2)} USDT`);
-                } else {
-                    alert(`😢 Множитель x${mult}. Вы проиграли.`);
-                }
-
-                ball = { x: 160, y: 20, vx: 0, vy: 0, radius: 6 };
                 document.getElementById('dropBtn').disabled = false;
             }
-
-            draw();
-            requestAnimationFrame(updatePhysics);
+            draw(); requestAnimationFrame(updatePhysics);
         }
 
         function dropBall() {
             if (isDropping || !userId) return;
             let bet = parseFloat(document.getElementById('betAmount').value);
             if (balance < bet) { alert("Недостаточно средств!"); return; }
+            
+            balance -= bet;
+            document.getElementById('balance-val').innerText = balance.toFixed(2);
+            
             isDropping = true;
             ball = { x: 160, y: 20, vx: (Math.random() - 0.5) * 2, vy: 0, radius: 6 };
             document.getElementById('dropBtn').disabled = true;
             updatePhysics();
+
+            // Отправляем ставку на сервер
+            fetch(API_URL + '/api/play', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, bet: bet })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                    balance += bet; // Возврат при ошибке
+                    document.getElementById('balance-val').innerText = balance.toFixed(2);
+                    return;
+                }
+                // Ждем, пока шарик долетит, и показываем результат
+                setTimeout(() => {
+                    balance = data.balance;
+                    document.getElementById('balance-val').innerText = balance.toFixed(2);
+                    if (data.win > 0) {
+                        alert(`🎉 Выигрыш! Множитель x${data.mult}. Вы получили ${data.win.toFixed(2)} USDT`);
+                    } else {
+                        alert(`😢 Множитель x${data.mult}. Вы проиграли.`);
+                    }
+                }, 2500);
+            });
         }
-        
         draw();
     </script>
 </body>
