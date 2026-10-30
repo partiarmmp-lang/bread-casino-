@@ -1,10 +1,10 @@
 {
   "name": "BREAD CASINO",
   "short_name": "BREAD",
-  "start_url": "/",
+  "start_url": "/site.html",
   "display": "standalone",
-  "background_color": "#000000",
-  "theme_color": "#000000",
+  "background_color": "#0a0a0a",
+  "theme_color": "#ffcc00",
   "icons": [
     {
       "src": "IMG_8566.png",
