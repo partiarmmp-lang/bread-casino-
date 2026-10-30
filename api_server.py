@@ -149,6 +149,41 @@ def play_slots():
         "freespins_won": freespins_won,
         "balance": run_async(get_balance(user_id))
     })
+    # --- КОЛЕСО ФОРТУНЫ (БЕСПЛАТНЫЙ СПИН РАЗ В СУТКИ) ---
+@app.route("/api/wheel/spin", methods=["POST"])
+def wheel_spin():
+    data = request.json
+    user_id = data.get("user_id")
+    
+    if not user_id:
+        return jsonify({"error": "No user ID"}), 400
+
+    # Здесь в идеале должна быть проверка: прошел ли день с последнего спина.
+    # Но пока для теста сделаем так, чтобы крутить можно было всегда.
+    # (Позже мы добавим проверку через базу данных)
+
+    # Сектора: 0 - пусто, 1 - 0.01, 2 - 0.05, 3 - 0.10, 4 - пусто, 5 - 0.50, 6 - пусто, 7 - 1.00
+    # Шансы (чем больше вес, тем чаще выпадает)
+    # Сумма весов = 100
+    segments_indices = [0, 1, 2, 3, 4, 5, 6, 7]
+    weights =        [30, 25, 20, 15, 5, 3, 1, 1] 
+    
+    win_index = random.choices(segments_indices, weights=weights, k=1)[0]
+    
+    # Суммы выигрышей по индексам
+    payouts = [0.0, 0.01, 0.05, 0.10, 0.0, 0.50, 0.0, 1.00]
+    win_amount = payouts[win_index]
+
+    if win_amount > 0:
+        run_async(update_balance(user_id, win_amount))
+        run_async(log_tx(user_id, "win", win_amount, "web_wheel"))
+
+    return jsonify({
+        "success": True,
+        "win_segment": win_index,
+        "win_amount": win_amount,
+        "balance": run_async(get_balance(user_id))
+    })
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
