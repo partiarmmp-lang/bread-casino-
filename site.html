@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BREAD CASINO | Официальный сайт</title>
+    <!-- Подключаем Telegram SDK на всякий случай, если откроют в боте -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap');
+
+        * { box-sizing: border-box; }
+        
+        body {
+            background: radial-gradient(circle at top, #2a2a2a 0%, #0a0a0a 100%);
+            color: #fff;
+            font-family: 'Montserrat', sans-serif;
+            margin: 0;
+            padding: 15px;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        /* Шапка с лого и балансом */
+        .header {
+            width: 100%;
+            max-width: 450px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px 20px;
+            border-radius: 15px;
+            border: 1px solid #333;
+            margin-bottom: 20px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+        }
+
+        .logo { font-size: 22px; font-weight: 900; color: #ffcc00; }
+        
+        .wallet-box {
+            background: #111;
+            border: 1px solid #333;
+            border-radius: 12px;
+            padding: 10px 15px;
+            text-align: right;
+            min-width: 120px;
+        }
+        .wallet-label { font-size: 10px; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+        .wallet-value { font-size: 20px; color: #00ff00; font-weight: 900; margin-top: 2px; }
+
+        /* Блок авторизации (если не в Telegram) */
+        .auth-box {
+            width: 100%;
+            max-width: 450px;
+            background: #1a1a1a;
+            border: 2px solid #ffcc00;
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            margin-bottom: 20px;
+            display: none; /* Скрыто по умолчанию */
+        }
+        .auth-box input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border: 1px solid #444;
+            background: #000;
+            color: #fff;
+            font-family: 'Montserrat', sans-serif;
+            text-align: center;
+        }
+        .auth-box button {
+            width: 100%;
+            padding: 12px;
+            background: #ffcc00;
+            color: #000;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        /* Кнопки пополнения и вывода */
+        .action-buttons {
+            width: 100%;
+            max-width: 450px;
+            display: flex;
+            gap: 10px;
+            margin-bottom: 25px;
+        }
+        .action-btn {
+            flex: 1;
+            padding: 15px;
+            border-radius: 12px;
+            border: none;
+            font-weight: bold;
+            font-size: 16px;
+            cursor: pointer;
+            font-family: 'Montserrat', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            text-decoration: none;
+        }
+        .btn-deposit { background: #00ff00; color: #000; }
+        .btn-withdraw { background: #333; color: #fff; border: 1px solid #555; }
+
+        /* Каталог игр */
+        .section-title {
+            width: 100%;
+            max-width: 450px;
+            text-align: left;
+            font-size: 18px;
+            color: #aaa;
+            margin-bottom: 15px;
+            padding-left: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .games-grid {
+            width: 100%;
+            max-width: 450px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-bottom: 80px; /* Отступ для нижнего меню */
+        }
+
+        .game-card {
+            background: #1a1a1a;
+            border-radius: 15px;
+            padding: 20px 10px;
+            text-align: center;
+            border: 2px solid #333;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-decoration: none;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 130px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .game-card:active { transform: scale(0.95); }
+        .game-card:hover { border-color: #ffcc00; box-shadow: 0 0 15px rgba(255, 204, 0, 0.3); }
+
+        /* Выделенная карточка (Колесо) */
+        .game-card.featured {
+            grid-column: span 2;
+            background: linear-gradient(135deg, #1a1a1a 0%, #3a2a00 100%);
+            border-color: #ffcc00;
+            height: 110px;
+            flex-direction: row;
+            justify-content: space-around;
+        }
+
+        .game-icon { font-size: 45px; margin-bottom: 10px; filter: drop-shadow(0 5px 10px rgba(0,0,0,0.5)); }
+        .game-title { font-weight: 700; font-size: 14px; }
+        
+        .featured .game-icon { font-size: 60px; margin: 0; }
+        .featured .game-title { font-size: 20px; color: #ffcc00; font-weight: 900; }
+
+        /* Нижнее меню */
+        .bottom-nav {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: #0f0f0f;
+            display: flex;
+            justify-content: space-around;
+            padding: 12px 0;
+            border-top: 1px solid #333;
+            z-index: 100;
+            padding-bottom: max(12px, env(safe-area-inset-bottom));
+        }
+
+        .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            color: #777;
+            text-decoration: none;
+            font-size: 11px;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .nav-item.active { color: #ffcc00; }
+        .nav-item i { font-size: 22px; margin-bottom: 4px; }
+
+        /* Модалка профиля */
+        .profile-modal {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .profile-content {
+            background: #1a1a1a;
+            border: 2px solid #ffcc00;
+            border-radius: 20px;
+            padding: 20px;
+            width: 100%;
+            max-width: 350px;
+            text-align: center;
+        }
+
+        .profile-content h2 { color: #ffcc00; margin-top: 0; }
+        
+        .ref-link {
+            background: #000;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #333;
+            word-break: break-all;
+            font-size: 12px;
+            margin: 15px 0;
+            color: #00ff00;
+        }
+
+        .modal-btn {
+            background: #ffcc00;
+            color: #000;
+            border: none;
+            padding: 12px;
+            border-radius: 8px;
+            font-weight: bold;
+            width: 100%;
+            cursor: pointer;
+            margin-bottom: 10px;
+            font-family: 'Montserrat', sans-serif;
+        }
+        .modal-btn.close { background: #333; color: #fff; margin-bottom: 0; }
+    </style>
+</head>
+<body>
+
+    <!-- Шапка -->
+    <div class="header">
+        <div class="logo">🍞 BREAD</div>
+        <div class="wallet-box">
+            <div class="wallet-label">Кошелек</div>
+            <div class="wallet-value"><span id="balance-val">0.00</span> <span style="font-size:12px;">USDT</span></div>
+        </div>
+    </div>
+
+    <!-- Блок ввода ID (Если не из Telegram) -->
+    <div class="auth-box" id="authBox">
+        <h3 style="color:#ffcc00; margin-top:0;">Вход в кошелек</h3>
+        <p style="font-size:12px; color:#aaa;">Введи свой Telegram ID, чтобы привязать кошелек</p>
+        <input type="number" id="userIdInput" placeholder="Например: 7022463747">
+        <button onclick="loginById()">Войти</button>
+    </div>
+
+    <!-- Кнопки действий -->
+    <div class="action-buttons">
+        <a href="https://t.me/Poblatoh_bot" target="_blank" class="action-btn btn-deposit">
+            <span>💳 Пополнить</span>
+        </a>
+        <a href="https://t.me/Poblatoh_bot" target="_blank" class="action-btn btn-withdraw">
+            <span>💸 Вывести</span>
+        </a>
+    </div>
+
+    <div class="section-title">🎮 Каталог игр</div>
+
+    <!-- Сетка игр -->
+    <div class="games-grid">
+        
+        <!-- Колесо (Выделенное) -->
+        <a href="wheel.html" class="game-card featured">
+            <div class="game-icon">🎡</div>
+            <div class="game-title">КОЛЕСО ФОРТУНЫ</div>
+        </a>
+
+        <!-- Остальные игры -->
+        <a href="slots.html" class="game-card">
+            <div class="game-icon">🎰</div>
+            <div class="game-title">DELUXE SLOTS</div>
+        </a>
+
+        <a href="crash.html" class="game-card">
+            <div class="game-icon">🚀</div>
+            <div class="game-title">CRASH</div>
+        </a>
+
+        <a href="index.html" class="game-card">
+            <div class="game-icon">🔵</div>
+            <div class="game-title">PLINKO</div>
+        </a>
+
+        <div class="game-card" onclick="alert('Скоро!')">
+            <div class="game-icon">🎲</div>
+            <div class="game-title">МИНЫ</div>
+        </div>
+    </div>
+
+    <!-- Нижнее меню -->
+    <div class="bottom-nav">
+        <div class="nav-item active">
+            <i>🏠</i>
+            <span>Игры</span>
+        </div>
+        <div class="nav-item" onclick="openProfile()">
+            <i>👤</i>
+            <span>Профиль</span>
+        </div>
+        <div class="nav-item" onclick="window.location.reload()">
+            <i>🔄</i>
+            <span>Обновить</span>
+        </div>
+    </div>
+
+    <!-- Модальное окно профиля -->
+    <div class="profile-modal" id="profileModal">
+        <div class="profile-content">
+            <h2>👤 Профиль</h2>
+            <p>Твой ID: <span id="user-id-display" style="color:#ffcc00; font-weight:bold;">...</span></p>
+            
+            <h3 style="color:#ffcc00; margin-top:20px;">👥 Партнерка</h3>
+            <p style="font-size:12px; color:#aaa;">10% с проигрышей твоих друзей</p>
+            <div class="ref-link" id="ref-link">Войди, чтобы получить ссылку</div>
+            
+            <button class="modal-btn" onclick="copyRef()">Скопировать ссылку</button>
+            <button class="modal-btn close" onclick="closeProfile()">Закрыть</button>
+        </div>
+    </div>
+
+    <script>
+        // ЗАМЕНИ НА СВОЙ АДРЕС RENDER
+        const API_URL = "https://bread-casino-11.onrender.com"; 
+        let userId = null;
+        let userBalance = 0;
+
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+
+        // 1. Пытаемся взять ID из Telegram
+        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            userId = tg.initDataUnsafe.user.id;
+            initUser();
+        } else {
+            // 2. Если мы в браузере (не в боте), показываем форму ввода ID
+            document.getElementById('authBox').style.display = 'block';
+            
+            // Проверяем, может ID уже сохранен в браузере
+            const savedId = localStorage.getItem('casino_user_id');
+            if (savedId) {
+                userId = savedId;
+                initUser();
+            }
+        }
+
+        function loginById() {
+            const inputVal = document.getElementById('userIdInput').value;
+            if (!inputVal || isNaN(inputVal)) {
+                alert("Введи правильный числовой ID");
+                return;
+            }
+            userId = inputVal;
+            localStorage.setItem('casino_user_id', userId); // Сохраняем в браузере
+            document.getElementById('authBox').style.display = 'none';
+            initUser();
+        }
+
+        function initUser() {
+            document.getElementById('user-id-display').innerText = userId;
+            const botUsername = "Poblatoh_bot"; 
+            document.getElementById('ref-link').innerText = `https://t.me/${botUsername}?start=ref_${userId}`;
+            fetchBalance();
+        }
+
+        function fetchBalance() {
+            if(!userId) return;
+            fetch(API_URL + '/api/balance', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId })
+            })
+            .then(res => res.json())
+            .then(data => {
+                userBalance = data.balance || 0;
+                document.getElementById('balance-val').innerText = userBalance.toFixed(2);
+            })
+            .catch(() => {
+                document.getElementById('balance-val').innerText = "Ошибка";
+            });
+        }
+
+        // --- Интерфейс ---
+        function openProfile() {
+            document.getElementById('profileModal').style.display = 'flex';
+        }
+
+        function closeProfile() {
+            document.getElementById('profileModal').style.display = 'none';
+        }
+
+        function copyRef() {
+            const link = document.getElementById('ref-link').innerText;
+            if(link.includes('Войди')) return;
+            navigator.clipboard.writeText(link).then(() => {
+                alert("Ссылка скопирована!");
+            });
+        }
+
+        // Обновляем баланс, если вернулись с игры
+        window.addEventListener('focus', fetchBalance);
+    </script>
+</body>
+</html>
