@@ -1,3 +1,5 @@
 Flask
-flask-cors
+python-dotenv
+aiocryptopay
 aiosqlite
+gunicorn
