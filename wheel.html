@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BREAD CASINO | Колесо Фортуны</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap');
+
+        body {
+            background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%);
+            color: #fff;
+            font-family: 'Montserrat', sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            user-select: none;
+        }
+
+        .header {
+            width: 100%;
+            padding: 15px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-sizing: border-box;
+            background: rgba(0,0,0,0.5);
+            position: absolute;
+            top: 0;
+            z-index: 10;
+        }
+
+        .back-btn {
+            background: #333; color: #fff; border: none; padding: 8px 15px;
+            border-radius: 10px; font-size: 14px; cursor: pointer;
+            font-family: 'Montserrat', sans-serif; font-weight: 700;
+        }
+
+        .balance-val { font-size: 18px; color: #00ff00; font-weight: 900; }
+
+        /* Контейнер для колеса */
+        .wheel-container {
+            position: relative;
+            width: 320px;
+            height: 320px;
+            margin-top: 80px;
+            margin-bottom: 20px;
+        }
+
+        /* Само колесо (Canvas) */
+        #wheelCanvas {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            box-shadow: 0 0 30px rgba(255, 204, 0, 0.3), inset 0 0 20px rgba(0,0,0,0.8);
+            border: 8px solid #333;
+            transition: transform 4s cubic-bezier(0.1, 0.7, 0.1, 1);
+        }
+
+        /* Указатель (Стрелка сверху) */
+        .pointer {
+            position: absolute;
+            top: -15px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 30px solid #ffcc00;
+            z-index: 5;
+            filter: drop-shadow(0 0 10px #ffcc00);
+        }
+
+        /* Кнопка SPIN */
+        .spin-btn {
+            background: linear-gradient(180deg, #ffcc00 0%, #ff8800 100%);
+            color: #000;
+            border: none;
+            padding: 15px 50px;
+            font-size: 24px;
+            font-weight: 900;
+            border-radius: 50px;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 0 5px 0 #aa5500, 0 10px 20px rgba(0,0,0,0.5);
+            transition: all 0.1s;
+            font-family: 'Montserrat', sans-serif;
+            margin-top: 10px;
+        }
+
+        .spin-btn:active {
+            transform: translateY(5px);
+            box-shadow: 0 0 0 #aa5500, 0 5px 10px rgba(0,0,0,0.5);
+        }
+
+        .spin-btn:disabled {
+            background: #555;
+            color: #888;
+            box-shadow: 0 5px 0 #333;
+            cursor: not-allowed;
+            transform: translateY(5px);
+        }
+
+        .info {
+            font-size: 12px;
+            color: #aaa;
+            margin-top: 15px;
+            max-width: 300px;
+        }
+
+        /* Модальное окно выигрыша */
+        #winModal {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.9);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            flex-direction: column;
+        }
+
+        .win-box {
+            background: #1a1a1a;
+            border: 3px solid #ffcc00;
+            padding: 30px;
+            border-radius: 20px;
+            text-align: center;
+            box-shadow: 0 0 50px rgba(255, 204, 0, 0.5);
+            animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        @keyframes pop {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+
+        .win-icon { font-size: 60px; margin-bottom: 10px; }
+        .win-amount { font-size: 36px; color: #00ff00; font-weight: 900; margin-bottom: 10px; }
+        .close-modal-btn {
+            background: #ffcc00; color: #000; border: none; padding: 10px 30px;
+            border-radius: 10px; font-size: 16px; font-weight: 900; cursor: pointer;
+            font-family: 'Montserrat', sans-serif;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <button class="back-btn" onclick="goBack()">⬅️ Назад</button>
+        <div>Баланс: <span class="balance-val" id="balance-val">...</span> USDT</div>
+    </div>
+
+    <div class="wheel-container">
+        <div class="pointer"></div>
+        <canvas id="wheelCanvas" width="600" height="600"></canvas>
+    </div>
+
+    <button class="spin-btn" id="spinBtn" onclick="spinWheel()">Крутить</button>
+    <div class="info">Бесплатный спин раз в 24 часа. Крути и забирай реальные USDT!</div>
+
+    <!-- Модалка выигрыша -->
+    <div id="winModal">
+        <div class="win-box">
+            <div class="win-icon" id="winIcon">🎉</div>
+            <div class="win-amount" id="winAmount">+0.00 USDT</div>
+            <div style="color:#aaa; margin-bottom:20px;" id="winText">Вы выиграли!</div>
+            <button class="close-modal-btn" onclick="closeWinModal()">Забрать</button>
+        </div>
+    </div>
+
+    <script>
+        // ЗАМЕНИ НА СВОЙ АДРЕС RENDER
+        const API_URL = "https://bread-casino-3.onrender.com"; 
+        
+        let userId = null;
+        let balance = 0;
+        let isSpinning = false;
+        let currentRotation = 0;
+
+        // Сектора колеса (должны совпадать с сервером)
+        const SEGMENTS = [
+            { label: "❌", value: 0, color: "#333" },     // Проигрыш
+            { label: "0.01", value: 0.01, color: "#444" }, // Копейки
+            { label: "0.05", value: 0.05, color: "#555" },
+            { label: "0.10", value: 0.10, color: "#666" },
+            { label: "❌", value: 0, color: "#333" },
+            { label: "0.50", value: 0.50, color: "#888" },
+            { label: "❌", value: 0, color: "#333" },
+            { label: "1.00", value: 1.00, color: "#ffcc00" } // Джекпот
+        ];
+
+        const canvas = document.getElementById('wheelCanvas');
+        const ctx = canvas.getContext('2d');
+        const numSegments = SEGMENTS.length;
+        const arcSize = (2 * Math.PI) / numSegments;
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const radius = canvas.width / 2;
+
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+
+        // --- ИНИЦИАЛИЗАЦИЯ ---
+        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            userId = tg.initDataUnsafe.user.id;
+            fetchBalance();
+        } else {
+            document.getElementById('balance-val').innerText = "Открой в боте!";
+            document.getElementById('spinBtn').disabled = true;
+        }
+
+        function fetchBalance() {
+            fetch(API_URL + '/api/balance', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId })
+            })
+            .then(res => res.json())
+            .then(data => {
+                balance = data.balance || 0;
+                document.getElementById('balance-val').innerText = balance.toFixed(2);
+            });
+        }
+
+        // --- ОТРИСОВКА КОЛЕСА ---
+        function drawWheel() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            for (let i = 0; i < numSegments; i++) {
+                const angle = i * arcSize;
+                
+                // Рисуем сектор
+                ctx.beginPath();
+                ctx.fillStyle = SEGMENTS[i].color;
+                ctx.moveTo(centerX, centerY);
+                ctx.arc(centerX, centerY, radius, angle, angle + arcSize);
+                ctx.fill();
+                ctx.strokeStyle = "#000";
+                ctx.lineWidth = 2;
+                ctx.stroke();
+
+                // Рисуем текст
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(angle + arcSize / 2);
+                ctx.textAlign = "right";
+                ctx.fillStyle = "#fff";
+                ctx.font = "bold 30px Montserrat";
+                ctx.fillText(SEGMENTS[i].label, radius - 20, 10);
+                ctx.restore();
+            }
+
+            // Центральный круг
+            ctx.beginPath();
+            ctx.fillStyle = "#111";
+            ctx.arc(centerX, centerY, 40, 0, 2 * Math.PI);
+            ctx.fill();
+            ctx.strokeStyle = "#ffcc00";
+            ctx.lineWidth = 5;
+            ctx.stroke();
+            
+            // Логотип в центре
+            ctx.fillStyle = "#ffcc00";
+            ctx.font = "30px Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("🍞", centerX, centerY);
+        }
+
+        // Начальная отрисовка
+        drawWheel();
+
+        // --- ЛОГИКА ВРАЩЕНИЯ ---
+        function spinWheel() {
+            if (isSpinning || !userId) return;
+            
+            isSpinning = true;
+            document.getElementById('spinBtn').disabled = true;
+
+            // Запрос к серверу
+            fetch(API_URL + '/api/wheel/spin', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                    isSpinning = false;
+                    document.getElementById('spinBtn').disabled = false;
+                    return;
+                }
+
+                // data.win_segment - индекс выигрышного сектора (0-7)
+                const winIndex = data.win_segment;
+                
+                // Вычисляем угол для остановки
+                // Чтобы сектор оказался под стрелкой (сверху), нужно повернуть на определенный угол
+                // Стрелка указывает на 270 градусов (или -90)
+                const targetAngle = 360 - (winIndex * (360 / numSegments)) - (360 / numSegments / 2);
+                
+                // Добавляем 5 полных оборотов для эффекта
+                const spins = 5;
+                const totalRotation = (spins * 360) + targetAngle;
+                
+                // Применяем вращение
+                currentRotation += totalRotation;
+                canvas.style.transform = `rotate(${currentRotation}deg)`;
+
+                // Ждем окончания анимации (4 секунды)
+                setTimeout(() => {
+                    balance = data.balance;
+                    document.getElementById('balance-val').innerText = balance.toFixed(2);
+                    
+                    showWinModal(data.win_amount, data.win_segment);
+                    playSound(data.win_amount > 0 ? 'win' : 'lose');
+                    
+                    isSpinning = false;
+                    document.getElementById('spinBtn').disabled = false;
+                }, 4200);
+            })
+            .catch(err => {
+                alert("Ошибка сервера: " + err.message);
+                isSpinning = false;
+                document.getElementById('spinBtn').disabled = false;
+            });
+        }
+
+        // --- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ---
+        function showWinModal(amount, segmentIndex) {
+            const modal = document.getElementById('winModal');
+            const icon = document.getElementById('winIcon');
+            const text = document.getElementById('winAmount');
+            const desc = document.getElementById('winText');
+
+            if (amount > 0) {
+                icon.innerText = amount >= 1 ? "💎" : "🎉";
+                text.innerText = `+${amount.toFixed(2)} USDT`;
+                text.style.color = "#00ff00";
+                desc.innerText = "Вы выиграли!";
+            } else {
+                icon.innerText = "😢";
+                text.innerText = "0.00 USDT";
+                text.style.color = "#ff4444";
+                desc.innerText = "Повезет в следующий раз!";
+            }
+
+            modal.style.display = 'flex';
+        }
+
+        function closeWinModal() {
+            document.getElementById('winModal').style.display = 'none';
+        }
+
+        function goBack() {
+            if (window.Telegram && window.Telegram.WebApp) {
+                window.Telegram.WebApp.close();
+            } else {
+                window.location.href = "app.html";
+            }
+        }
+
+        // --- ЗВУКИ ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'win') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+                osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.5);
+            } else {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                osc.start(); osc.stop(audioCtx.currentTime + 0.3);
+            }
+        }
+    </script>
+</body>
+</html>
