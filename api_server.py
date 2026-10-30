@@ -6,7 +6,7 @@ from flask_cors import CORS
 from database import init_db, get_balance, update_balance, try_deduct_balance, log_tx
 
 app = Flask(__name__)
-CORS(app) # Разрешаем запросы с твоего сайта на GitHub
+CORS(app)
 
 def run_async(coro):
     loop = asyncio.new_event_loop()
@@ -31,6 +31,7 @@ def get_user_balance():
     balance = run_async(get_balance(user_id))
     return jsonify({"balance": balance})
 
+# --- ИГРА PLINKO ---
 @app.route("/api/play", methods=["POST"])
 def play_plinko():
     data = request.json
@@ -56,6 +57,7 @@ def play_plinko():
 
     return jsonify({"success": True, "mult": mult, "win": win_amount, "balance": run_async(get_balance(user_id))})
 
+# --- ИГРА CRASH ---
 @app.route("/api/crash/start", methods=["POST"])
 def crash_start():
     data = request.json
@@ -86,45 +88,91 @@ def crash_cashout():
 
     return jsonify({"success": True, "balance": run_async(get_balance(user_id))})
 
-# --- ИГРА СЛОТЫ ---
+# --- ИГРА СЛОТЫ (МНОГОЛИНЕЙНЫЕ) ---
 @app.route("/api/slots", methods=["POST"])
 def play_slots():
     data = request.json
     user_id = data.get("user_id")
-    bet = float(data.get("bet", 0.1))
-    
+    bet_total = float(data.get("bet", 0.01)) # Общая ставка
+    bet_line = float(data.get("bet_line", 0.01)) # Ставка на линию
+    lines_count = int(data.get("lines", 1)) # Кол-во активных линий
+    is_freespin = data.get("is_freespin", False)
+
     if not user_id:
         return jsonify({"error": "No user ID"}), 400
 
-    # Списываем ставку
-    if not run_async(try_deduct_balance(user_id, bet)):
-        return jsonify({"error": "Недостаточно средств"}), 400
+    # Если это не фриспин, списываем деньги
+    if not is_freespin:
+        if not run_async(try_deduct_balance(user_id, bet_total)):
+            return jsonify({"error": "Недостаточно средств"}), 400
 
-    # Символы и их шансы (чем дороже символ, тем реже падает)
+    # Генерация сетки 3x5
     symbols = ["🍒", "🍋", "🍇", "🔔", "⭐", "💎", "7️⃣"]
-    weights = [30, 25, 20, 12, 8, 4, 1] # Общий вес 100
+    weights = [30, 25, 20, 12, 8, 4, 1] # Вес для генерации
     
-    # Генерируем 3 случайных символа с учетом веса
-    line = random.choices(symbols, weights=weights, k=3)
+    grid = []
+    scatter_count = 0
     
-    # Множители (x2, x3, x5 и т.д. за 3 в ряд)
+    for r in range(3):
+        row = []
+        for c in range(5):
+            sym = random.choices(symbols, weights=weights, k=1)[0]
+            row.append(sym)
+            if sym == "⭐":
+                scatter_count += 1
+        grid.append(row)
+
+    # Логика подсчета выигрыша по линиям
+    # Выигрышные комбинации (3, 4, 5 в ряд слева направо)
     payouts = {
-        "🍒": 2, "🍋": 3, "🍇": 5, "🔔": 10, 
-        "⭐": 20, "💎": 50, "7️⃣": 100
+        "🍒": {3: 2, 4: 5, 5: 10},
+        "🍋": {3: 3, 4: 8, 5: 15},
+        "🍇": {3: 5, 4: 12, 5: 25},
+        "🔔": {3: 10, 4: 25, 5: 50},
+        "💎": {3: 20, 4: 50, 5: 100},
+        "7️⃣": {3: 50, 4: 150, 5: 500}
     }
 
-    win_amount = 0
-    # Проверяем, выпало ли 3 одинаковых
-    if line[0] == line[1] == line[2]:
-        mult = payouts[line[0]]
-        win_amount = bet * mult
-        run_async(update_balance(user_id, win_amount))
-        run_async(log_tx(user_id, "win", win_amount, "web_slots"))
+    total_win = 0.0
+    freespins_won = 0
+
+    # Считаем выигрыш только по активным линиям
+    for r in range(lines_count):
+        first_sym = grid[r][0]
+        if first_sym == "⭐": continue # Скаттеры не дают выигрыш по линии
+        
+        count = 1
+        for c in range(1, 5):
+            if grid[r][c] == first_sym:
+                count += 1
+            else:
+                break
+        
+        if count >= 3:
+            mult = payouts.get(first_sym, {}).get(count, 0)
+            if mult > 0:
+                # Выигрыш = ставка на линию * множитель
+                win_for_line = bet_line * mult
+                total_win += win_for_line
+
+    # Если выпало 3+ скаттера - даем фриспины (независимо от линий)
+    if scatter_count >= 3:
+        freespins_won = 10
+
+    # Применяем множитель фриспина (x2) к выигрышу
+    if is_freespin and total_win > 0:
+        total_win *= 2
+
+    # Начисляем деньги, если есть выигрыш
+    if total_win > 0:
+        run_async(update_balance(user_id, total_win))
+        run_async(log_tx(user_id, "win", total_win, "web_slots"))
 
     return jsonify({
         "success": True,
-        "line": line,
-        "win": win_amount,
+        "grid": grid,
+        "win": total_win,
+        "freespins_won": freespins_won,
         "balance": run_async(get_balance(user_id))
     })
 
