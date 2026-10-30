@@ -1,12 +1,17 @@
 import asyncio
 import random
 import os
+import uuid
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from database import init_db, get_balance, update_balance, try_deduct_balance, log_tx
+from aiocryptopay import AioCryptoPay, Networks
 
 app = Flask(__name__)
 CORS(app)
+
+CRYPTO_TOKEN = os.getenv("CRYPTO_TOKEN")
+crypto = AioCryptoPay(token=CRYPTO_TOKEN, network=Networks.MAIN_NET)
 
 def run_async(coro):
     loop = asyncio.new_event_loop()
@@ -26,10 +31,57 @@ def get_user_balance():
     user_id = data.get("user_id")
     if not user_id:
         return jsonify({"error": "No user ID"}), 400
-    
     run_async(init_db())
     balance = run_async(get_balance(user_id))
     return jsonify({"balance": balance})
+
+# --- СОЗДАНИЕ СЧЕТА НА ОПЛАТУ (ДЕПОЗИТ) ---
+@app.route("/api/deposit", methods=["POST"])
+def create_deposit():
+    data = request.json
+    user_id = data.get("user_id")
+    amount = float(data.get("amount", 1.0))
+    
+    if not user_id or amount < 0.1:
+        return jsonify({"error": "Минимальная сумма 0.1 USDT"}), 400
+
+    async def create_inv():
+        invoice = await crypto.create_invoice(asset='USDT', amount=amount)
+        return invoice.bot_invoice_url
+    
+    try:
+        pay_url = run_async(create_inv())
+        return jsonify({"success": True, "pay_url": pay_url})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# --- ВЫВОД СРЕДСТВ ---
+@app.route("/api/withdraw", methods=["POST"])
+def withdraw_funds():
+    data = request.json
+    user_id = data.get("user_id")
+    amount = float(data.get("amount", 0))
+
+    if not user_id or amount < 3.0:
+        return jsonify({"error": "Минимум для вывода 3 USDT"}), 400
+
+    if not run_async(try_deduct_balance(user_id, amount)):
+        return jsonify({"error": "Недостаточно средств"}), 400
+
+    async def do_transfer():
+        try:
+            await crypto.transfer(user_id=user_id, asset='USDT', amount=amount, spend_id=str(uuid.uuid4()))
+            return True
+        except Exception as e:
+            run_async(update_balance(user_id, amount)) # Возврат при ошибке
+            raise e
+
+    try:
+        run_async(do_transfer())
+        run_async(log_tx(user_id, "withdraw", -amount, "web_crypto"))
+        return jsonify({"success": True, "balance": run_async(get_balance(user_id))})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # --- ИГРА PLINKO ---
 @app.route("/api/play", methods=["POST"])
