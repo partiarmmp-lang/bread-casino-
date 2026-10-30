@@ -15,6 +15,13 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiocryptopay import AioCryptoPay, Networks
 
+# --- ФИКС ДЛЯ PYTHON 3.14 ---
+try:
+    loop = asyncio.get_running_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+# ----------------------------
 from database import (
     init_db, get_balance, get_bonus_balance, get_total_balance,
     update_balance, add_bonus, use_bonus, add_wager_progress,
@@ -2669,10 +2676,29 @@ async def main():
     print(f"Бот запущен: @{BOT_USERNAME}")
     await dp.start_polling(bot)
 
+async def main():
+    global BOT_USERNAME
+    await init_db()
+    await fix_database()
+    me = await bot.get_me()
+    BOT_USERNAME = me.username
+    print(f"Бот запущен: @{BOT_USERNAME}")
+    await dp.start_polling(bot)
+
+# --- ЗАГЛУШКА ДЛЯ RENDER ---
+import http.server
+import socketserver
+import threading
+
+def run_dummy_server():
+    PORT = int(os.environ.get("PORT", 10000))
+    Handler = http.server.SimpleHTTPRequestHandler
+    with socketserver.TCPServer(("", PORT), Handler) as httpd:
+        httpd.serve_forever()
+
 if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    threading.Thread(target=run_dummy_server, daemon=True).start()
     try:
-        loop.run_until_complete(main())
+        asyncio.run(main())
     except KeyboardInterrupt:
         pass
