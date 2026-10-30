@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BREAD CASINO | Slots</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap');
+
+        body {
+            background: radial-gradient(circle at center, #2a2a2a 0%, #0a0a0a 100%);
+            color: #fff;
+            font-family: 'Montserrat', sans-serif;
+            text-align: center;
+            margin: 0;
+            padding: 15px;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        h1 {
+            font-size: 28px;
+            margin: 0 0 5px 0;
+            color: #ffcc00;
+            text-shadow: 0 0 10px rgba(255, 204, 0, 0.5);
+            letter-spacing: 1px;
+        }
+
+        .balance {
+            font-size: 18px;
+            margin-bottom: 20px;
+            color: #00ff00;
+            font-weight: 700;
+            text-shadow: 0 0 5px rgba(0, 255, 0, 0.3);
+        }
+
+        /* Контейнер для слотов */
+        .slot-machine {
+            background: linear-gradient(180deg, #333 0%, #111 100%);
+            border: 4px solid #ffcc00;
+            border-radius: 20px;
+            padding: 20px 10px;
+            margin: 0 auto 20px auto;
+            max-width: 350px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8), inset 0 0 20px rgba(0,0,0,0.5);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .reels-container {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            position: relative;
+        }
+
+        /* Окно одного барабана */
+        .reel-window {
+            width: 80px;
+            height: 100px;
+            background: #fff;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: inset 0 10px 15px rgba(0,0,0,0.3), inset 0 -10px 15px rgba(0,0,0,0.3);
+        }
+
+        /* Сама лента барабана */
+        .reel-strip {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: transform 0.1s linear;
+        }
+
+        .symbol {
+            font-size: 50px;
+            height: 100px; /* Высота совпадает с окном */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            color: #000;
+        }
+
+        /* Линии выигрыша */
+        .payline {
+            position: absolute;
+            top: 50%;
+            left: 10px;
+            right: 10px;
+            height: 2px;
+            background: rgba(255, 0, 0, 0.3);
+            transform: translateY(-50%);
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .bet-controls {
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            background: #222;
+            padding: 5px 15px;
+            border-radius: 30px;
+            border: 1px solid #444;
+        }
+
+        .bet-controls button {
+            background: #444;
+            color: #fff;
+            border: none;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .bet-controls input {
+            background: transparent;
+            border: none;
+            color: #ffcc00;
+            font-size: 18px;
+            font-weight: 900;
+            width: 60px;
+            text-align: center;
+            outline: none;
+        }
+
+        /* Кнопка СПИН */
+        .spin-btn {
+            background: linear-gradient(180deg, #ffcc00 0%, #ff8800 100%);
+            color: #000;
+            border: none;
+            padding: 15px 50px;
+            font-size: 22px;
+            font-weight: 900;
+            border-radius: 50px;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 0 5px 0 #aa5500, 0 10px 20px rgba(0,0,0,0.5);
+            transition: all 0.1s;
+        }
+
+        .spin-btn:active {
+            transform: translateY(5px);
+            box-shadow: 0 0 0 #aa5500, 0 5px 10px rgba(0,0,0,0.5);
+        }
+
+        .spin-btn:disabled {
+            background: #555;
+            color: #888;
+            box-shadow: 0 5px 0 #333;
+            cursor: not-allowed;
+            transform: translateY(5px);
+        }
+
+        /* Всплывающее сообщение о выигрыше */
+        #winMessage {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) scale(0);
+            background: rgba(0, 0, 0, 0.9);
+            border: 3px solid #ffcc00;
+            padding: 20px 40px;
+            border-radius: 15px;
+            font-size: 28px;
+            color: #ffcc00;
+            font-weight: 900;
+            text-shadow: 0 0 10px #ffcc00;
+            z-index: 100;
+            transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: none;
+            white-space: nowrap;
+        }
+
+        #winMessage.show {
+            transform: translate(-50%, -50%) scale(1);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>🎰 BREAD SLOTS</h1>
+    <div class="balance">Баланс: <span id="balance-val">...</span> USDT</div>
+
+    <div class="slot-machine">
+        <div class="reels-container" id="reels">
+            <!-- Сюда JS сгенерирует барабаны -->
+        </div>
+        <div class="payline"></div>
+    </div>
+
+    <div class="controls">
+        <div class="bet-controls">
+            <button onclick="changeBet(-0.1)">-</button>
+            <input type="number" id="betAmount" value="0.10" min="0.05" step="0.05" readonly>
+            <button onclick="changeBet(0.1)">+</button>
+        </div>
+        <button class="spin-btn" id="spinBtn" onclick="spin()">Крутить</button>
+    </div>
+
+    <div id="winMessage">ВЫИГРЫШ!</div>
+
+    <script>
+        // --- НАСТРОЙКИ ---
+        const API_URL = "https://bread-casino-3.onrender.com"; // ССЫЛКА НА ТВОЙ СЕРВЕР
+        const SYMBOLS = ["🍒", "🍋", "🍇", "🔔", "⭐", "💎", "7️⃣"];
+        const REEL_COUNT = 3;
+        const SYMBOLS_PER_REEL = 20; // Длина ленты барабана
+        
+        let balance = 0.00;
+        let userId = null;
+        let isSpinning = false;
+        
+        // Множители выигрыша (сколько ставил * на это)
+        // 3 в ряд дают больше
+        const PAYOUTS = {
+            "🍒": 2,
+            "🍋": 3,
+            "🍇": 5,
+            "🔔": 10,
+            "⭐": 20,
+            "💎": 50,
+            "7️⃣": 100
+        };
+
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+
+        // --- ИНИЦИАЛИЗАЦИЯ ---
+        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            userId = tg.initDataUnsafe.user.id;
+            fetch(API_URL + '/api/balance', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId })
+            })
+            .then(res => res.json())
+            .then(data => {
+                balance = data.balance || 0;
+                document.getElementById('balance-val').innerText = balance.toFixed(2);
+            })
+            .catch(() => {
+                document.getElementById('balance-val').innerText = "Ошибка сети";
+            });
+        } else {
+            document.getElementById('balance-val').innerText = "Открой в боте!";
+        }
+
+        // --- СОЗДАНИЕ БАРАБАНОВ ---
+        const reelsContainer = document.getElementById('reels');
+        let reelStrips = [];
+
+        for (let i = 0; i < REEL_COUNT; i++) {
+            const windowDiv = document.createElement('div');
+            windowDiv.className = 'reel-window';
+            
+            const stripDiv = document.createElement('div');
+            stripDiv.className = 'reel-strip';
+            stripDiv.id = 'strip-' + i;
+            
+            // Заполняем ленту рандомными символами
+            for (let j = 0; j < SYMBOLS_PER_REEL; j++) {
+                const symDiv = document.createElement('div');
+                symDiv.className = 'symbol';
+                symDiv.innerText = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+                stripDiv.appendChild(symDiv);
+            }
+            
+            windowDiv.appendChild(stripDiv);
+            reelsContainer.appendChild(windowDiv);
+            reelStrips.push(stripDiv);
+        }
+
+        // --- ЛОГИКА ---
+        function changeBet(amount) {
+            if (isSpinning) return;
+            let input = document.getElementById('betAmount');
+            let current = parseFloat(input.value);
+            let newVal = current + amount;
+            if (newVal < 0.05) newVal = 0.05;
+            input.value = newVal.toFixed(2);
+        }
+
+        function spin() {
+            if (isSpinning || !userId) return;
+            
+            let bet = parseFloat(document.getElementById('betAmount').value);
+            if (balance < bet) {
+                showWinMessage("Недостаточно средств!");
+                return;
+            }
+
+            isSpinning = true;
+            document.getElementById('spinBtn').disabled = true;
+            balance -= bet;
+            document.getElementById('balance-val').innerText = balance.toFixed(2);
+
+            // Запрос к серверу (он решает результат)
+            fetch(API_URL + '/api/slots', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, bet: bet })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    showWinMessage(data.error);
+                    isSpinning = false;
+                    document.getElementById('spinBtn').disabled = false;
+                    return;
+                }
+
+                const finalSymbols = data.line; // ['🍒', '🍋', '7️⃣']
+                
+                // Анимация кручения для каждого барабана
+                animateReel(0, finalSymbols[0], 1500); // 1-й барабан останавливается через 1.5 сек
+                animateReel(1, finalSymbols[1], 2000); // 2-й через 2 сек
+                animateReel(2, finalSymbols[2], 2500); // 3-й через 2.5 сек
+
+                // Ждем, пока остановится последний барабан, и показываем результат
+                setTimeout(() => {
+                    balance = data.balance;
+                    document.getElementById('balance-val').innerText = balance.toFixed(2);
+                    
+                    if (data.win > 0) {
+                        showWinMessage(`ВЫИГРЫШ: +${data.win.toFixed(2)} USDT!`);
+                        playSound('win');
+                    } else {
+                        playSound('lose');
+                    }
+                    
+                    isSpinning = false;
+                    document.getElementById('spinBtn').disabled = false;
+                }, 2600);
+            })
+            .catch(err => {
+                showWinMessage("Ошибка сервера");
+                isSpinning = false;
+                document.getElementById('spinBtn').disabled = false;
+            });
+        }
+
+        function animateReel(reelIndex, targetSymbol, duration) {
+            const strip = reelStrips[reelIndex];
+            const symbolElements = strip.children;
+            
+            // Находим индекс нужного символа в ленте (берем последний попавшийся)
+            let targetIndex = -1;
+            for (let i = symbolElements.length - 1; i >= 0; i--) {
+                if (symbolElements[i].innerText === targetSymbol) {
+                    targetIndex = i;
+                    break;
+                }
+            }
+            if (targetIndex === -1) targetIndex = 0; // Если не нашли (не должно быть)
+
+            // Высота одного символа
+            const symbolHeight = 100; 
+            
+            // Сколько раз прокрутить перед остановкой
+            const spins = 3; 
+            const finalTransform = -((targetIndex + (spins * SYMBOLS_PER_REEL)) * symbolHeight);
+
+            // Сброс позиции в начало, чтобы анимация всегда шла сверху вниз
+            strip.style.transition = 'none';
+            strip.style.transform = `translateY(0px)`;
+            
+            // Форсируем рефлоу браузера, чтобы сброс применился
+            void strip.offsetWidth;
+
+            // Запускаем анимацию
+            strip.style.transition = `transform ${duration}ms cubic-bezier(0.1, 0.7, 0.1, 1)`;
+            strip.style.transform = `translateY(${finalTransform}px)`;
+        }
+
+        function showWinMessage(text) {
+            const msg = document.getElementById('winMessage');
+            msg.innerText = text;
+            msg.classList.add('show');
+            setTimeout(() => {
+                msg.classList.remove('show');
+            }, 2500);
+        }
+
+        // --- ЗВУКИ (Генерация через Web Audio API) ---
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const audioCtx = new AudioContext();
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') audioCtx.resume();
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            if (type === 'win') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
+                osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.5);
+            } else if (type === 'lose') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(200, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                osc.start();
+                osc.stop(audioCtx.currentTime + 0.3);
+            }
+        }
+    </script>
+</body>
+</html>
