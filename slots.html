@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>BREAD CASINO | Deluxe Slots</title>
+    <title>BREAD CASINO | Slots</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap');
@@ -20,55 +20,39 @@
             flex-direction: column;
             align-items: center;
             min-height: 100vh;
+            overflow-x: hidden;
         }
 
         h1 { font-size: 22px; color: #ffcc00; margin: 0 0 5px 0; text-shadow: 0 0 10px rgba(255, 204, 0, 0.5); }
         .balance { font-size: 18px; color: #00ff00; font-weight: 700; margin-bottom: 15px; }
 
-        /* Игровое поле */
+        /* Контейнер автомата */
         .slot-machine {
-            background: linear-gradient(180deg, #1a1a1a 0%, #000 100%);
+            background: #1a1a1a;
             border: 3px solid #ffcc00;
             border-radius: 15px;
-            padding: 15px;
+            padding: 10px;
             width: 100%;
             max-width: 360px;
             box-sizing: border-box;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8), inset 0 0 20px rgba(0,0,0,0.5);
-            position: relative;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
         }
 
-        /* 3 Линии (ряда) */
-        .grid-container {
-            display: flex;
-            flex-direction: column;
-            gap: 5px;
-            position: relative;
-        }
-
-        .payline {
+        /* Сетка барабанов */
+        .reels-grid {
             display: flex;
             justify-content: space-between;
-            background: rgba(255,255,255,0.05);
-            border-radius: 5px;
-            padding: 5px;
-            position: relative;
+            gap: 4px;
         }
 
-        .payline.active { background: rgba(255, 204, 0, 0.2); border: 1px solid #ffcc00; }
-        
-        /* Сами барабаны */
-        .reel-window {
-            width: 18%;
-            height: 70px;
-            background: #111;
+        .reel-column {
+            flex: 1;
+            background: #fff;
             border-radius: 5px;
+            height: 210px; /* 3 символа по 70px */
             overflow: hidden;
             position: relative;
-            box-shadow: inset 0 5px 10px rgba(0,0,0,0.8), inset 0 -5px 10px rgba(0,0,0,0.8);
-            display: flex;
-            justify-content: center;
-            align-items: center;
+            box-shadow: inset 0 10px 10px -10px rgba(0,0,0,0.8), inset 0 -10px 10px -10px rgba(0,0,0,0.8);
         }
 
         .reel-strip {
@@ -78,8 +62,6 @@
             width: 100%;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            transition: transform 0.1s linear;
         }
 
         .symbol {
@@ -105,7 +87,7 @@
             justify-content: space-between;
             align-items: center;
             background: #1a1a1a;
-            padding: 10px;
+            padding: 10px 15px;
             border-radius: 10px;
             border: 1px solid #333;
         }
@@ -122,7 +104,7 @@
             color: #000; border: none; padding: 15px; font-size: 20px;
             font-weight: 900; border-radius: 10px; cursor: pointer;
             text-transform: uppercase; box-shadow: 0 5px 0 #aa5500;
-            transition: all 0.1s; margin-top: 10px;
+            transition: all 0.1s; margin-top: 5px;
         }
 
         .spin-btn:active { transform: translateY(5px); box-shadow: 0 0 0 #aa5500; }
@@ -150,8 +132,8 @@
     <div class="balance">Баланс: <span id="balance-val">...</span> USDT</div>
 
     <div class="slot-machine">
-        <div class="grid-container" id="grid">
-            <!-- Сетка 3x5 создастся через JS -->
+        <div class="reels-grid" id="grid">
+            <!-- Сетка 5 колонок создастся через JS -->
         </div>
     </div>
 
@@ -160,7 +142,7 @@
             <span>Ставка (на линию):</span>
             <div>
                 <button onclick="changeBet('line', -0.01)">-</button>
-                <input type="number" id="betLine" value="0.01" min="0.01" step="0.01" readonly>
+                <input type="number" id="betLine" value="0.01" readonly>
                 <button onclick="changeBet('line', 0.01)">+</button>
             </div>
         </div>
@@ -168,16 +150,14 @@
             <span>Линии (1-3):</span>
             <div>
                 <button onclick="changeBet('lines', -1)">-</button>
-                <input type="number" id="linesCount" value="1" min="1" max="3" readonly>
+                <input type="number" id="linesCount" value="1" readonly>
                 <button onclick="changeBet('lines', 1)">+</button>
             </div>
         </div>
-        <div class="row" style="justify-content: center; background: transparent; border: none; padding: 0;">
-            <span style="color:#aaa; font-size:14px;">Итого ставка: <b id="totalBet" style="color:#ffcc00;">0.01</b> USDT</span>
-        </div>
+        <div style="color:#aaa; font-size:14px;">Итого ставка: <b id="totalBet" style="color:#ffcc00;">0.01</b> USDT</div>
         
         <button class="spin-btn" id="spinBtn" onclick="spin()">Крутить</button>
-        <div style="font-size: 12px; color: #aaa; margin-top: 5px;" id="freespinStatus"></div>
+        <div style="font-size: 14px; color: #ffcc00; margin-top: 5px; font-weight:bold;" id="freespinStatus"></div>
     </div>
 
     <div id="overlay" onclick="closeOverlay()">
@@ -188,22 +168,23 @@
     </div>
 
     <script>
+        // ВСТАВЬ СВОЮ ССЫЛКУ НА RENDER (без слэша в конце)
         const API_URL = "https://bread-casino-3.onrender.com";
+        
         const SYMBOLS = ["🍒", "🍋", "🍇", "🔔", "⭐", "💎", "7️⃣"];
-        const SCATTER = "⭐";
+        const REELS = 5;
+        const ROWS = 3;
+        const SYMBOLS_PER_REEL = 15; // Запас символов для анимации
         
         let balance = 0.00;
         let userId = null;
         let isSpinning = false;
-        let freespinsLeft = 0; // Счетчик фриспинов
+        let freespinsLeft = 0;
         
         let betLine = 0.01;
         let linesCount = 1;
         
-        let reelStrips = [];
-        const ROWS = 3;
-        const REELS = 5;
-        const SYMBOLS_PER_REEL = 15; // Длина ленты
+        let reelStrips = []; // Сюда сохраним ссылки на ленты барабанов
 
         const tg = window.Telegram.WebApp;
         tg.ready();
@@ -214,7 +195,7 @@
             userId = tg.initDataUnsafe.user.id;
             fetchBalance();
         } else {
-            document.getElementById('balance-val').innerText = "Открой в боте!";
+            document.getElementById('balance-val').innerText = "Ошибка авторизации";
         }
 
         function fetchBalance() {
@@ -226,41 +207,36 @@
             .then(data => {
                 balance = data.balance || 0;
                 updateBalanceUI();
-            });
+            })
+            .catch(() => { document.getElementById('balance-val').innerText = "Ошибка сети"; });
         }
 
         function updateBalanceUI() {
             document.getElementById('balance-val').innerText = balance.toFixed(2);
         }
 
-        // --- СОЗДАНИЕ СЕТКИ ---
+        // --- СОЗДАНИЕ БАРАБАНОВ ---
         const gridContainer = document.getElementById('grid');
         
-        for (let r = 0; r < ROWS; r++) {
-            const payline = document.createElement('div');
-            payline.className = 'payline' + (r === 0 ? ' active' : '');
-            payline.id = 'line-' + r;
+        for (let c = 0; c < REELS; c++) {
+            const column = document.createElement('div');
+            column.className = 'reel-column';
             
-            for (let c = 0; c < REELS; c++) {
-                const reelWindow = document.createElement('div');
-                reelWindow.className = 'reel-window';
-                
-                const strip = document.createElement('div');
-                strip.className = 'reel-strip';
-                strip.id = `strip-${r}-${c}`;
-                
-                for (let i = 0; i < SYMBOLS_PER_REEL; i++) {
-                    const sym = document.createElement('div');
-                    sym.className = 'symbol';
-                    sym.innerText = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
-                    strip.appendChild(sym);
-                }
-                
-                reelWindow.appendChild(strip);
-                payline.appendChild(reelWindow);
-                reelStrips.push({ r, c, strip });
+            const strip = document.createElement('div');
+            strip.className = 'reel-strip';
+            strip.id = 'strip-' + c;
+            
+            // Забиваем ленту символами
+            for (let i = 0; i < SYMBOLS_PER_REEL; i++) {
+                const sym = document.createElement('div');
+                sym.className = 'symbol';
+                sym.innerText = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
+                strip.appendChild(sym);
             }
-            gridContainer.appendChild(payline);
+            
+            column.appendChild(strip);
+            gridContainer.appendChild(column);
+            reelStrips.push(strip);
         }
 
         // --- УПРАВЛЕНИЕ СТАВКАМИ ---
@@ -270,22 +246,15 @@
             if (type === 'line') {
                 betLine += amount;
                 if (betLine < 0.01) betLine = 0.01;
-                if (betLine > 10) betLine = 10;
                 document.getElementById('betLine').value = betLine.toFixed(2);
             } else if (type === 'lines') {
                 linesCount += amount;
                 if (linesCount < 1) linesCount = 1;
                 if (linesCount > 3) linesCount = 3;
                 document.getElementById('linesCount').value = linesCount;
-                
-                // Подсвечиваем активные линии
-                for (let i = 0; i < 3; i++) {
-                    document.getElementById('line-' + i).className = 'payline' + (i < linesCount ? ' active' : '');
-                }
             }
             
-            const total = betLine * linesCount;
-            document.getElementById('totalBet').innerText = total.toFixed(2);
+            document.getElementById('totalBet').innerText = (betLine * linesCount).toFixed(2);
         }
 
         // --- ИГРА ---
@@ -294,12 +263,8 @@
             
             let totalBet = parseFloat((betLine * linesCount).toFixed(2));
             
-            // Если это фриспин, деньги не списываем
             if (freespinsLeft === 0) {
-                if (balance < totalBet) {
-                    alert("Недостаточно средств!");
-                    return;
-                }
+                if (balance < totalBet) { alert("Недостаточно средств!"); return; }
                 balance -= totalBet;
                 updateBalanceUI();
             } else {
@@ -310,7 +275,6 @@
             isSpinning = true;
             document.getElementById('spinBtn').disabled = true;
 
-            // Запрос к серверу (передаем ставку на линию и кол-во линий, или флаг фриспина)
             fetch(API_URL + '/api/slots', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
@@ -318,7 +282,7 @@
                     bet: totalBet, 
                     bet_line: betLine,
                     lines: linesCount,
-                    is_freespin: freespinsLeft > 0 // Серверу важно знать, фриспин это или нет
+                    is_freespin: (freespinsLeft > 0 || document.getElementById('spinBtn').innerText.includes('Бесплатно')) 
                 })
             })
             .then(res => res.json())
@@ -330,23 +294,20 @@
                     return;
                 }
 
-                const resultGrid = data.grid; // Двумерный массив 3x5
+                const resultGrid = data.grid; // 3x5
                 
-                // Запускаем анимацию для каждого барабана с задержкой
+                // Анимация для каждого барабана (по очереди)
                 for (let c = 0; c < REELS; c++) {
-                    for (let r = 0; r < ROWS; r++) {
-                        let reelObj = reelStrips.find(x => x.r === r && x.c === c);
-                        // Задержка зависит от колонки (барабаны останавливаются по очереди)
-                        animateReel(reelObj.strip, resultGrid[r][c], 1000 + (c * 300));
-                    }
+                    // Берем центральный ряд (1) для остановки
+                    let targetSym = resultGrid[1][c]; 
+                    animateReel(reelStrips[c], targetSym, 1000 + (c * 300));
                 }
 
-                // Ждем окончания анимации (5-й барабан)
+                // Ждем, пока крутится последний барабан
                 setTimeout(() => {
                     balance = data.balance;
                     updateBalanceUI();
                     
-                    // Обработка фриспинов
                     if (data.freespins_won > 0) {
                         freespinsLeft += data.freespins_won;
                         updateFreespinUI();
@@ -361,7 +322,7 @@
                     
                     isSpinning = false;
                     document.getElementById('spinBtn').disabled = false;
-                }, 2800); // Ждем, пока остановится последний барабан
+                }, 2600); 
             })
             .catch(err => {
                 alert("Ошибка сервера");
@@ -370,37 +331,39 @@
             });
         }
 
-        function animateReel(strip, targetSymbol, duration) {
-            const symbolElements = strip.children;
-            let targetIndex = -1;
+        function animateReel(strip, targetSym, duration) {
+            const children = strip.children;
+            let targetIdx = 0;
             
-            // Ищем нужный символ ближе к концу ленты
-            for (let i = symbolElements.length - 1; i >= 0; i--) {
-                if (symbolElements[i].innerText === targetSymbol) {
-                    targetIndex = i;
-                    break;
+            for (let i = 0; i < children.length; i++) {
+                if (children[i].innerText === targetSym) {
+                    targetIdx = i;
+                    // Чтобы анимация не была мгновенной, берем не первый попавшийся, а чуть дальше
+                    if(i > 5) break; 
                 }
             }
-            if (targetIndex === -1) targetIndex = 0;
 
-            const symbolHeight = 70; // Должно совпадать с CSS
-            const finalTransform = -(targetIndex * symbolHeight);
+            // Высота одного символа
+            const h = 70; 
+            
+            // Сдвигаем так, чтобы targetSym оказался в ЦЕНТРЕ (индекс 1)
+            // Нам нужно, чтобы targetIdx был вторым в окне.
+            // Значит сдвиг = -(targetIdx - 1) * 70
+            const finalY = -(targetIdx - 1) * h;
 
-            // Сброс и анимация
             strip.style.transition = 'none';
-            strip.style.transform = `translateY(${-(SYMBOLS_PER_REEL * symbolHeight)}px)`; // Ставим в конец
+            strip.style.transform = `translateY(0px)`;
             void strip.offsetWidth;
             
             strip.style.transition = `transform ${duration}ms cubic-bezier(0.1, 0.7, 0.1, 1)`;
-            strip.style.transform = `translateY(${finalTransform}px)`;
+            strip.style.transform = `translateY(${finalY}px)`;
         }
 
-        // --- ФРИСПИНЫ И UI ---
+        // --- UI ФРИСПИНОВ ---
         function updateFreespinUI() {
             const status = document.getElementById('freespinStatus');
             if (freespinsLeft > 0) {
                 status.innerText = `🔥 ФРИСПИНЫ: ${freespinsLeft} (x2)`;
-                status.style.color = '#ffcc00';
                 document.getElementById('spinBtn').innerText = "Крутить (Бесплатно)";
             } else {
                 status.innerText = "";
