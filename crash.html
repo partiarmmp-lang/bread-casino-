@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BREAD CASINO | Crash</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { background-color: #121212; color: #fff; font-family: Arial, sans-serif; text-align: center; margin: 0; padding: 10px; overflow: hidden; }
+        h1 { color: #ffcc00; font-size: 24px; margin-bottom: 5px; }
+        #balance { font-size: 18px; margin-bottom: 15px; color: #00ff00; }
+        #gameArea { position: relative; width: 100%; height: 300px; background: #1e1e1e; border-radius: 10px; overflow: hidden; margin-bottom: 15px; box-shadow: 0 0 20px rgba(255, 204, 0, 0.2); }
+        #rocket { position: absolute; bottom: 0; left: 0; font-size: 40px; transition: transform 0.1s linear; }
+        #multiplier { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); font-size: 48px; font-weight: bold; color: #ffcc00; text-shadow: 0 0 10px rgba(255, 204, 0, 0.5); }
+        .controls { display: flex; justify-content: center; gap: 10px; }
+        input { padding: 12px; font-size: 16px; border-radius: 5px; border: none; width: 80px; text-align: center; }
+        button { padding: 12px 24px; font-size: 16px; font-weight: bold; background-color: #ffcc00; color: #000; border: none; border-radius: 5px; cursor: pointer; flex: 1; }
+        button:active { transform: scale(0.95); }
+        button:disabled { background-color: #555; color: #999; cursor: not-allowed; }
+        #cashoutBtn { background-color: #00ff00; display: none; }
+        #statusMsg { margin-top: 10px; font-size: 18px; height: 24px; font-weight: bold; }
+    </style>
+</head>
+<body>
+
+    <h1>🚀 BREAD CRASH</h1>
+    <div id="balance">Баланс: <span id="balance-val">...</span> USDT</div>
+    
+    <div id="gameArea">
+        <div id="rocket">🚀</div>
+        <div id="multiplier">x1.00</div>
+    </div>
+
+    <div id="statusMsg"></div>
+
+    <div class="controls">
+        <input type="number" id="betAmount" value="0.10" min="0.05" step="0.05">
+        <button id="startBtn" onclick="startGame()">Взлет</button>
+        <button id="cashoutBtn" onclick="cashout()">Забрать</button>
+    </div>
+
+    <script>
+        const API_URL = "https://твой-сервер.onrender.com"; // <--- ЗАМЕНИ НА СВОЙ АДРЕС
+        let balance = 0.00;
+        let userId = null;
+        let isPlaying = false;
+        let currentMultiplier = 1.00;
+        let gameInterval = null;
+        let crashPoint = 0; // Точка, на которой упадет ракета (приходит с сервера)
+        let currentBet = 0;
+
+        const tg = window.Telegram.WebApp;
+        tg.ready();
+        tg.expand();
+
+        // Авторизация и загрузка баланса
+        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
+            userId = tg.initDataUnsafe.user.id;
+            fetch(API_URL + '/api/balance', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId })
+            })
+            .then(res => res.json())
+            .then(data => {
+                balance = data.balance || 0;
+                document.getElementById('balance-val').innerText = balance.toFixed(2);
+            });
+        } else {
+            document.getElementById('balance-val').innerText = "Открой через бота!";
+        }
+
+        function startGame() {
+            if (isPlaying || !userId) return;
+            currentBet = parseFloat(document.getElementById('betAmount').value);
+            if (balance < currentBet) { alert("Недостаточно средств!"); return; }
+
+            // Блокируем кнопки
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('cashoutBtn').style.display = 'block';
+            document.getElementById('statusMsg').innerText = "";
+            document.getElementById('rocket').style.transform = 'translate(0, 0)';
+            document.getElementById('multiplier').innerText = 'x1.00';
+            document.getElementById('multiplier').style.color = '#ffcc00';
+            
+            balance -= currentBet;
+            document.getElementById('balance-val').innerText = balance.toFixed(2);
+            
+            isPlaying = true;
+            currentMultiplier = 1.00;
+
+            // Запрашиваем у сервера точку краша и списываем ставку
+            fetch(API_URL + '/api/crash/start', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, bet: currentBet })
+            })
+            .then(res => res.json())
+            .then(data => {
+                if (data.error) {
+                    alert(data.error);
+                    resetGame();
+                    return;
+                }
+                crashPoint = data.crash_point; // Сервер говорит, когда упадет
+                
+                // Запускаем анимацию полета
+                gameInterval = setInterval(() => {
+                    currentMultiplier += 0.05; // Скорость роста
+                    
+                    // Двигаем ракету (визуально)
+                    let x = Math.min((currentMultiplier - 1) * 50, 250);
+                    let y = Math.min((currentMultiplier - 1) * 50, 200);
+                    document.getElementById('rocket').style.transform = `translate(${x}px, -${y}px) rotate(-45deg)`;
+                    
+                    document.getElementById('multiplier').innerText = `x${currentMultiplier.toFixed(2)}`;
+
+                    // Проверяем, не взорвалась ли ракета
+                    if (currentMultiplier >= crashPoint) {
+                        crashGame();
+                    }
+                }, 100); // Обновление каждые 100мс
+            });
+        }
+
+        function cashout() {
+            if (!isPlaying) return;
+            clearInterval(gameInterval);
+            isPlaying = false;
+            
+            document.getElementById('cashoutBtn').style.display = 'none';
+            document.getElementById('multiplier').style.color = '#00ff00';
+            document.getElementById('statusMsg').innerText = `🎉 Забрано на x${currentMultiplier.toFixed(2)}!`;
+
+            // Отправляем на сервер, что игрок успел забрать
+            fetch(API_URL + '/api/crash/cashout', {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ user_id: userId, bet: currentBet, multiplier: currentMultiplier })
+            })
+            .then(res => res.json())
+            .then(data => {
+                balance = data.balance;
+                document.getElementById('balance-val').innerText = balance.toFixed(2);
+                resetGame();
+            });
+        }
+
+        function crashGame() {
+            clearInterval(gameInterval);
+            isPlaying = false;
+            document.getElementById('cashoutBtn').style.display = 'none';
+            document.getElementById('multiplier').innerText = `x${crashPoint.toFixed(2)} 💥`;
+            document.getElementById('multiplier').style.color = '#ff4444';
+            document.getElementById('statusMsg').innerText = "😢 Ракета взорвалась. Ставка сгорела.";
+            resetGame();
+        }
+
+        function resetGame() {
+            document.getElementById('startBtn').disabled = false;
+        }
+    </script>
+</body>
+</html>
