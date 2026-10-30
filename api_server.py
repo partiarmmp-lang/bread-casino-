@@ -10,6 +10,14 @@ from aiocryptopay import AioCryptoPay, Networks
 app = Flask(__name__)
 CORS(app)
 
+# --- ФИКС ДЛЯ PYTHON 3.14 ---
+try:
+    loop = asyncio.get_running_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+# ----------------------------
+
 CRYPTO_TOKEN = os.getenv("CRYPTO_TOKEN")
 crypto = AioCryptoPay(token=CRYPTO_TOKEN, network=Networks.MAIN_NET)
 
@@ -35,7 +43,6 @@ def get_user_balance():
     balance = run_async(get_balance(user_id))
     return jsonify({"balance": balance})
 
-# --- СОЗДАНИЕ СЧЕТА НА ОПЛАТУ (ДЕПОЗИТ) ---
 @app.route("/api/deposit", methods=["POST"])
 def create_deposit():
     data = request.json
@@ -55,7 +62,6 @@ def create_deposit():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# --- ВЫВОД СРЕДСТВ ---
 @app.route("/api/withdraw", methods=["POST"])
 def withdraw_funds():
     data = request.json
@@ -73,7 +79,7 @@ def withdraw_funds():
             await crypto.transfer(user_id=user_id, asset='USDT', amount=amount, spend_id=str(uuid.uuid4()))
             return True
         except Exception as e:
-            run_async(update_balance(user_id, amount)) # Возврат при ошибке
+            run_async(update_balance(user_id, amount))
             raise e
 
     try:
@@ -83,7 +89,6 @@ def withdraw_funds():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# --- ИГРА PLINKO ---
 @app.route("/api/play", methods=["POST"])
 def play_plinko():
     data = request.json
@@ -109,7 +114,6 @@ def play_plinko():
 
     return jsonify({"success": True, "mult": mult, "win": win_amount, "balance": run_async(get_balance(user_id))})
 
-# --- ИГРА CRASH ---
 @app.route("/api/crash/start", methods=["POST"])
 def crash_start():
     data = request.json
@@ -140,7 +144,6 @@ def crash_cashout():
 
     return jsonify({"success": True, "balance": run_async(get_balance(user_id))})
 
-# --- ИГРА СЛОТЫ ---
 @app.route("/api/slots", methods=["POST"])
 def play_slots():
     data = request.json
@@ -216,7 +219,6 @@ def play_slots():
         "balance": run_async(get_balance(user_id))
     })
 
-# --- КОЛЕСО ФОРТУНЫ ---
 @app.route("/api/wheel/spin", methods=["POST"])
 def wheel_spin():
     data = request.json
