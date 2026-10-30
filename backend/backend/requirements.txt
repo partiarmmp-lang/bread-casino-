@@ -1,7 +1,0 @@
-Flask
-flask-cors
-python-dotenv
-aiocryptopay
-aiosqlite
-aiogram
-gunicorn
