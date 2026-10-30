@@ -26,7 +26,7 @@ def get_user_balance():
     user_id = data.get("user_id")
     if not user_id:
         return jsonify({"error": "No user ID"}), 400
-    
+    
     run_async(init_db())
     balance = run_async(get_balance(user_id))
     return jsonify({"balance": balance})
@@ -36,7 +36,7 @@ def play_plinko():
     data = request.json
     user_id = data.get("user_id")
     bet = float(data.get("bet", 0.1))
-    
+    
     if not user_id:
         return jsonify({"error": "No user ID"}), 400
 
@@ -61,7 +61,7 @@ def crash_start():
     data = request.json
     user_id = data.get("user_id")
     bet = float(data.get("bet", 0.1))
-    
+    
     if not run_async(try_deduct_balance(user_id, bet)):
         return jsonify({"error": "Недостаточно средств"}), 400
 
@@ -79,14 +79,55 @@ def crash_cashout():
     user_id = data.get("user_id")
     bet = float(data.get("bet", 0.1))
     multiplier = float(data.get("multiplier", 1.0))
-    
+    
     win_amount = bet * multiplier
     run_async(update_balance(user_id, win_amount))
     run_async(log_tx(user_id, "win", win_amount, "web_crash"))
 
     return jsonify({"success": True, "balance": run_async(get_balance(user_id))})
 
+# --- ИГРА СЛОТЫ ---
+@app.route("/api/slots", methods=["POST"])
+def play_slots():
+    data = request.json
+    user_id = data.get("user_id")
+    bet = float(data.get("bet", 0.1))
+    
+    if not user_id:
+        return jsonify({"error": "No user ID"}), 400
+
+    # Списываем ставку
+    if not run_async(try_deduct_balance(user_id, bet)):
+        return jsonify({"error": "Недостаточно средств"}), 400
+
+    # Символы и их шансы (чем дороже символ, тем реже падает)
+    symbols = ["🍒", "🍋", "🍇", "🔔", "⭐", "💎", "7️⃣"]
+    weights = [30, 25, 20, 12, 8, 4, 1] # Общий вес 100
+    
+    # Генерируем 3 случайных символа с учетом веса
+    line = random.choices(symbols, weights=weights, k=3)
+    
+    # Множители (x2, x3, x5 и т.д. за 3 в ряд)
+    payouts = {
+        "🍒": 2, "🍋": 3, "🍇": 5, "🔔": 10, 
+        "⭐": 20, "💎": 50, "7️⃣": 100
+    }
+
+    win_amount = 0
+    # Проверяем, выпало ли 3 одинаковых
+    if line[0] == line[1] == line[2]:
+        mult = payouts[line[0]]
+        win_amount = bet * mult
+        run_async(update_balance(user_id, win_amount))
+        run_async(log_tx(user_id, "win", win_amount, "web_slots"))
+
+    return jsonify({
+        "success": True,
+        "line": line,
+        "win": win_amount,
+        "balance": run_async(get_balance(user_id))
+    })
+
 if __name__ == "__main__":
-    # Render сам подставляет нужный порт в переменную окружения PORT
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
