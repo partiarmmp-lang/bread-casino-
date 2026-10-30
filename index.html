@@ -4,10 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Bread Casino</title>
-    <!-- Подключаем Telegram WebApp -->
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        /* Красивый фон и стили */
         body {
             margin: 0;
             padding: 0;
@@ -15,7 +13,6 @@
             background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
             color: white;
             min-height: 100vh;
-            overflow-x: hidden;
         }
         .header {
             display: flex;
@@ -24,79 +21,36 @@
             padding: 15px 20px;
             background: rgba(0, 0, 0, 0.3);
             backdrop-filter: blur(10px);
-            position: sticky;
-            top: 0;
-            z-index: 100;
         }
-        .logo {
-            font-size: 24px;
-            font-weight: bold;
-            color: #ffd700;
-            text-shadow: 0 0 10px rgba(255, 215, 0, 0.5);
-        }
+        .logo { font-size: 24px; font-weight: bold; color: #ffd700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
         .balance-box {
             background: rgba(255, 215, 0, 0.1);
             border: 1px solid #ffd700;
             padding: 8px 15px;
             border-radius: 20px;
             font-weight: bold;
-        }
-        .balance-amount {
-            color: #ffd700;
-        }
-        .action-buttons {
-            display: flex;
-            gap: 10px;
-        }
-        .btn {
-            padding: 8px 15px;
-            border: none;
-            border-radius: 8px;
-            font-weight: bold;
             cursor: pointer;
-            transition: 0.2s;
         }
+        .action-buttons { display: flex; gap: 10px; }
+        .btn { padding: 8px 15px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
         .btn-deposit { background: #00c853; color: white; }
         .btn-withdraw { background: #d32f2f; color: white; }
-        .games-grid {
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 15px;
-            padding: 20px;
-            max-width: 600px;
-            margin: 0 auto;
-        }
+        .games-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; padding: 20px; max-width: 600px; margin: 0 auto; }
         .game-card {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 15px;
-            padding: 20px;
-            text-align: center;
-            cursor: pointer;
-            transition: 0.3s;
-            text-decoration: none;
-            color: white;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-        }
-        .game-card:hover {
-            background: rgba(255, 255, 255, 0.1);
-            transform: translateY(-5px);
-            box-shadow: 0 10px 20px rgba(0,0,0,0.3);
-            border-color: #ffd700;
+            background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 15px; padding: 20px; text-align: center; cursor: pointer;
+            text-decoration: none; color: white; display: flex; flex-direction: column; align-items: center;
         }
         .game-icon { font-size: 40px; margin-bottom: 10px; }
-        .game-title { font-size: 16px; font-weight: bold; }
     </style>
 </head>
 <body>
 
     <div class="header">
         <div class="logo">🍞 BREAD CASINO</div>
-        <div class="balance-box">
-            💰 <span class="balance-amount">0.00 USDT</span>
+        <!-- Сюда будем вставлять виджет входа -->
+        <div id="auth-container">
+            <button class="balance-box" onclick="loginViaBot()">💰 Войдите</button>
         </div>
     </div>
 
@@ -114,43 +68,45 @@
             <div class="game-icon">🚀</div>
             <div class="game-title">Crash</div>
         </a>
-        <!-- Пока добавим только то, что у тебя есть. Позже сюда добавим Плинко и другие! -->
         <a href="site.html" class="game-card">
             <div class="game-icon">🎲</div>
             <div class="game-title">Все игры</div>
         </a>
     </div>
 
-    <!-- Подключаем наш "мозг" -->
     <script src="assets/js/api.js"></script>
     <script>
-        // Инициализация Telegram
         const tg = window.Telegram.WebApp;
-        tg.expand(); // Разворачиваем на весь экран
+        tg.expand();
 
-        // Если мы внутри Telegram, сразу загружаем баланс
-        if (tg.initData) {
-            updateBalanceUI();
-        } else {
-            // Если в браузере - показываем кнопку входа (сделаем позже)
-            document.querySelector('.balance-amount').textContent = 'Войдите';
+        // Функция входа через бота (открывает бота с параметром для входа)
+        function loginViaBot() {
+            // Открываем бота, передаем параметр для авторизации
+            window.location.href = "https://t.me/Poblatoh_bot?start=site_login";
         }
 
-        // Заглушки для кнопок (мы сделаем их рабочими на следующем шаге)
+        // Проверяем, есть ли initData (если зашли из бота)
+        if (tg.initData) {
+            // Если зашли из бота - сохраняем данные и грузим баланс
+            localStorage.setItem('tg_init_data', tg.initData);
+            updateBalanceUI();
+            document.getElementById('auth-container').innerHTML = '<div class="balance-box">💰 <span class="balance-amount">0.00 USDT</span></div>';
+        } else if (localStorage.getItem('tg_init_data')) {
+            // Если уже входили ранее (сохранено в браузере)
+            updateBalanceUI();
+            document.getElementById('auth-container').innerHTML = '<div class="balance-box">💰 <span class="balance-amount">0.00 USDT</span></div>';
+        }
+
         function showTopup() {
+            if (!localStorage.getItem('tg_init_data')) return alert("Сначала войдите через Telegram!");
             let amount = prompt("Введите сумму пополнения в USDT:", "1");
             if (amount) {
                 API.topup(parseFloat(amount)).then(res => {
-                    // Открываем ссылку на оплату в CryptoBot
                     window.open(res.pay_url, '_blank');
                     alert("Оплатите счет в открывшемся окне. После оплаты нажмите ОК.");
-                    // Проверяем оплату
                     setTimeout(() => {
                         API.checkPayment(res.invoice_id).then(check => {
-                            if (check.paid) {
-                                alert("Баланс пополнен!");
-                                updateBalanceUI();
-                            }
+                            if (check.paid) { alert("Баланс пополнен!"); updateBalanceUI(); }
                         });
                     }, 5000);
                 }).catch(e => alert(e.message));
@@ -158,11 +114,11 @@
         }
 
         function showWithdraw() {
-            let amount = prompt("Введите сумму вывода в USDT (минимум 3):", "3");
+            if (!localStorage.getItem('tg_init_data')) return alert("Сначала войдите через Telegram!");
+            let amount = prompt("Введите сумму вывода (мин. 3 USDT):", "3");
             if (amount) {
                 API.withdraw(parseFloat(amount)).then(res => {
-                    alert("Вывод успешен! Проверьте CryptoBot.");
-                    updateBalanceUI();
+                    alert("Вывод успешен!"); updateBalanceUI();
                 }).catch(e => alert(e.message));
             }
         }
