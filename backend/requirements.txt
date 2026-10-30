@@ -5,3 +5,4 @@ aiocryptopay
 aiosqlite
 aiogram
 gunicorn
+asyncpg
