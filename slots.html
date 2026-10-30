@@ -422,5 +422,23 @@
             }
         }
     </script>
+    <!-- Кнопка возврата в бота -->
+    <div style="text-align: center; margin-top: 20px; padding-bottom: 20px;">
+        <button onclick="goBackToBot()" style="background: #0088cc; color: white; border: none; padding: 12px 24px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer;">
+            🤖 Вернуться в бот
+        </button>
+    </div>
+
+    <script>
+        function goBackToBot() {
+            // Закрываем Mini App (если открыто в Telegram)
+            if (window.Telegram && window.Telegram.WebApp) {
+                window.Telegram.WebApp.close();
+            } else {
+                // Если открыто в браузере, просто переходим в бота
+                window.location.href = "https://t.me/Poblatoh_bot";
+            }
+        }
+    </script>
 </body>
 </html>
