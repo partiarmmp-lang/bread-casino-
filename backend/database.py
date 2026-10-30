@@ -4,7 +4,7 @@ import secrets
 import string
 import datetime
 
-DB_URL = os.environ.get('DATABASE_URL', 'postgresql://postgres.nweygfqvmlwdmdnddxre:Dundel2009!.@aws-1-eu-west-3.pooler.supabase.com:5432/postgres')
+DB_URL = os.environ.get('DATABASE_URL', 'postgresql://postgres.nweygfqvmlwdmdnddxre:Dundel2009!.@aws-1-eu-west-3.pooler.supabase.com:6543/postgres')
 _pool = None
 
 async def get_pool():
