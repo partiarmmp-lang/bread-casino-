@@ -17,23 +17,19 @@
         .btn-withdraw { background: linear-gradient(135deg, #d32f2f, #9a0007); color: white; box-shadow: 0 4px 15px rgba(211,47,47,0.4); }
         
         .games-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; padding: 20px; max-width: 600px; margin: 0 auto; }
-        .game-card { 
-            background: linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01)); 
-            border: 1px solid rgba(255,255,255,0.1); 
-            border-radius: 20px; padding: 30px 20px; text-align: center; cursor: pointer; 
-            text-decoration: none; color: white; display: flex; flex-direction: column; align-items: center;
-            transition: 0.3s; position: relative; overflow: hidden;
-        }
-        .game-card::before {
-            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: linear-gradient(45deg, transparent, rgba(255,215,0,0.1), transparent);
-            transform: translateX(-100%); transition: 0.5s;
-        }
-        .game-card:hover::before { transform: translateX(100%); }
+        .game-card { background: linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01)); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 30px 20px; text-align: center; cursor: pointer; text-decoration: none; color: white; display: flex; flex-direction: column; align-items: center; transition: 0.3s; }
         .game-card:hover { border-color: #ffd700; box-shadow: 0 10px 25px rgba(255,215,0,0.2); }
-        .game-icon { font-size: 50px; margin-bottom: 15px; filter: drop-shadow(0 0 10px rgba(255,255,255,0.3)); }
+        .game-icon { font-size: 50px; margin-bottom: 15px; }
         .game-title { font-size: 18px; font-weight: 700; }
         #auth-container { display: flex; align-items: center; }
+
+        /* Модальное окно для ввода суммы */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; backdrop-filter: blur(5px); }
+        .modal-content { background: #1e1e38; padding: 30px; border-radius: 20px; width: 80%; max-width: 350px; text-align: center; border: 1px solid rgba(255,215,0,0.3); }
+        .modal-content h3 { margin-top: 0; color: #ffd700; }
+        .modal-input { width: 100%; padding: 15px; margin: 15px 0; border-radius: 10px; border: 1px solid #444; background: #0a0a14; color: white; font-size: 18px; text-align: center; box-sizing: border-box; }
+        .modal-btn { width: 100%; padding: 15px; margin-top: 10px; border: none; border-radius: 10px; background: #00c853; color: white; font-weight: bold; font-size: 16px; cursor: pointer; }
+        .modal-close { background: #555; margin-top: 10px; }
     </style>
 </head>
 <body>
@@ -48,8 +44,8 @@
     </div>
 
     <div class="action-buttons">
-        <button class="btn btn-deposit" onclick="showTopup()">Пополнить</button>
-        <button class="btn btn-withdraw" onclick="showWithdraw()">Вывести</button>
+        <button class="btn btn-deposit" onclick="openModal('deposit')">Пополнить</button>
+        <button class="btn btn-withdraw" onclick="openModal('withdraw')">Вывести</button>
     </div>
 
     <div class="games-grid">
@@ -65,10 +61,16 @@
             <div class="game-icon">🚀</div>
             <div class="game-title">CRASH</div>
         </a>
-        <a href="site.html" class="game-card">
-            <div class="game-icon">🎲</div>
-            <div class="game-title">ВСЕ ИГРЫ</div>
-        </a>
+    </div>
+
+    <!-- Модальное окно -->
+    <div class="modal-overlay" id="payment-modal">
+        <div class="modal-content">
+            <h3 id="modal-title">Пополнение</h3>
+            <input type="number" id="modal-amount" class="modal-input" value="1" step="0.1" min="0.05">
+            <button class="modal-btn" id="modal-action-btn" onclick="confirmAction()">Оплатить</button>
+            <button class="modal-btn modal-close" onclick="closeModal()">Отмена</button>
+        </div>
     </div>
 
     <script src="assets/js/api.js"></script>
@@ -88,36 +90,68 @@
             updateBalanceUI();
         }
 
-        function showTopup() {
-            if (!localStorage.getItem('tg_user_id')) return alert("Пожалуйста, войдите через Telegram!");
-            let amount = prompt("Введите сумму пополнения в USDT (мин. 0.05):", "1");
-            if (amount && !isNaN(amount)) {
-                amount = parseFloat(amount);
-                if (amount < 0.05) return alert("Минимальная сумма 0.05 USDT");
+        // --- Логика модального окна ---
+        let currentAction = '';
 
-                API.topup(amount).then(res => {
-                    window.open(res.pay_url, '_blank');
-                    alert("Оплатите счет в открывшемся окне. После оплаты нажмите ОК.");
-                    setTimeout(() => {
-                        API.checkPayment(res.invoice_id).then(check => {
-                            if (check.paid) { alert("Баланс успешно пополнен!"); updateBalanceUI(); }
-                            else { alert("Оплата еще не поступила. Подождите пару минут."); }
-                        });
-                    }, 5000);
-                }).catch(e => alert("Ошибка: " + e.message));
+        function openModal(type) {
+            if (!localStorage.getItem('tg_user_id')) {
+                alert("Пожалуйста, войдите через Telegram (нажмите кнопку вверху)!");
+                return;
             }
+            currentAction = type;
+            const modal = document.getElementById('payment-modal');
+            const title = document.getElementById('modal-title');
+            const input = document.getElementById('modal-amount');
+            const btn = document.getElementById('modal-action-btn');
+
+            if (type === 'deposit') {
+                title.textContent = "Пополнение (USDT)";
+                btn.textContent = "Перейти к оплате";
+                btn.style.background = "#00c853";
+                input.value = "1";
+                input.min = "0.05";
+            } else {
+                title.textContent = "Вывод (мин. 3 USDT)";
+                btn.textContent = "Вывести";
+                btn.style.background = "#d32f2f";
+                input.value = "3";
+                input.min = "3";
+            }
+            modal.style.display = 'flex';
         }
 
-        function showWithdraw() {
-            if (!localStorage.getItem('tg_user_id')) return alert("Пожалуйста, войдите через Telegram!");
-            let amount = prompt("Введите сумму вывода в USDT (минимум 3 USDT):", "3");
-            if (amount && !isNaN(amount)) {
-                amount = parseFloat(amount);
-                if (amount < 3.0) return alert("Минимальная сумма для вывода — 3 USDT");
+        function closeModal() {
+            document.getElementById('payment-modal').style.display = 'none';
+        }
+
+        function confirmAction() {
+            const amount = parseFloat(document.getElementById('modal-amount').value);
+            
+            if (currentAction === 'deposit') {
+                if (amount < 0.05) return alert("Минимум 0.05 USDT");
+                closeModal();
+                
+                API.topup(amount).then(res => {
+                    // Открываем ссылку на оплату
+                    if (res.pay_url) {
+                        window.open(res.pay_url, '_blank');
+                        alert("Оплатите счет. После оплаты нажмите ОК.");
+                        setTimeout(() => {
+                            API.checkPayment(res.invoice_id).then(check => {
+                                if (check.paid) { alert("Баланс пополнен!"); updateBalanceUI(); }
+                                else { alert("Оплата еще не поступила."); }
+                            });
+                        }, 5000);
+                    }
+                }).catch(e => alert("Ошибка сети: " + e.message));
+                
+            } else if (currentAction === 'withdraw') {
+                if (amount < 3) return alert("Минимум 3 USDT");
+                closeModal();
                 API.withdraw(amount).then(res => {
-                    alert("Вывод успешно выполнен! Проверьте ваш CryptoBot.");
+                    alert("Вывод успешен! Проверьте CryptoBot.");
                     updateBalanceUI();
-                }).catch(e => alert("Ошибка при выводе: " + e.message));
+                }).catch(e => alert("Ошибка: " + e.message));
             }
         }
     </script>
