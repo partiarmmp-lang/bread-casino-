@@ -30,7 +30,14 @@
     <div class="header">
         <div class="logo">🍞 BREAD</div>
         <div id="auth-container">
-            <script async src="https://telegram.org/js/telegram-widget.js?22" data-telegram-login="Poblatoh_bot" data-size="medium" data-radius="10" data-auth-url="https://partiarmmp-lang.github.io/bread-casino-/" data-request-access="write"></script>
+            <!-- Скрипт Telegram вынесен отдельно -->
+            <script async src="https://telegram.org/js/telegram-widget.js?22" 
+                    data-telegram-login="Poblatoh_bot" 
+                    data-size="medium" 
+                    data-radius="10" 
+                    data-auth-url="https://partiarmmp-lang.github.io/bread-casino-/" 
+                    data-request-access="write">
+            </script>
         </div>
         <div class="balance-box" id="balance-box" style="display: none;">
             💰 <span id="balance-display">0.00</span> USDT
@@ -58,9 +65,10 @@
     </div>
 
     <script>
-        // --- ВСТРОЕННЫЙ API (без api.js) ---
+        // --- НАСТРОЙКИ ---
         const API_URL = 'https://bread-casino-14.onrender.com';
 
+        // --- API ЗАПРОСЫ ---
         function getUserId() {
             return localStorage.getItem('tg_user_id') || '';
         }
@@ -69,20 +77,25 @@
             let url = API_URL + endpoint;
             const userId = getUserId();
             
+            // Добавляем user_id в URL
             if (userId) {
                 url += (url.includes('?') ? '&' : '?') + 'user_id=' + userId;
             }
 
+            // Для GET запросов добавляем параметры в URL
             if (method === 'GET' && body) {
                 for (const key in body) {
                     url += '&' + key + '=' + encodeURIComponent(body[key]);
                 }
             }
 
+            // Показываем, куда уходит запрос
+            alert("Отправляю запрос на:\n" + url);
+
             try {
                 const response = await fetch(url, { method: method });
                 const data = await response.json();
-                if (!response.ok) throw new Error(data.error || 'Ошибка');
+                if (!response.ok) throw new Error(data.error || 'Ошибка сервера');
                 return data;
             } catch (error) {
                 alert("Ошибка сети: " + error.message);
@@ -90,76 +103,76 @@
             }
         }
 
-        const API = {
-            getBalance: () => apiRequest('/api/balance'),
-            topup: (amount) => apiRequest('/api/topup', 'GET', { amount: amount }),
-            withdraw: (amount) => apiRequest('/api/withdraw', 'POST', { amount: amount })
-        };
-
-        async function updateBalanceUI() {
-            const display = document.getElementById('balance-display');
-            if (!display) return;
-            try {
-                const data = await API.getBalance();
-                display.textContent = parseFloat(data.balance).toFixed(2) + ' USDT';
-            } catch (error) {
-                display.textContent = "Ошибка";
-            }
-        }
-
-        // --- ЛОГИКА ИНТЕРФЕЙСА ---
-        const urlParams = new URLSearchParams(window.location.search);
-        if (urlParams.has('id') && urlParams.has('hash')) {
-            localStorage.setItem('tg_user_id', urlParams.get('id'));
-            window.history.replaceState({}, document.title, window.location.pathname);
-        }
-        
-        if (localStorage.getItem('tg_user_id')) {
-            document.getElementById('auth-container').style.display = 'none';
-            document.getElementById('balance-box').style.display = 'block';
-            updateBalanceUI();
-        }
-
+        // --- ЛОГИКА ---
         let actionType = '';
 
-        function openModal(type) {
-            if (!localStorage.getItem('tg_user_id')) {
+        window.openModal = function(type) {
+            if (!getUserId()) {
                 return alert("Пожалуйста, войдите через Telegram!");
             }
             actionType = type;
             document.getElementById('modal-title').textContent = type === 'deposit' ? 'Пополнение (USDT)' : 'Вывод (мин. 3 USDT)';
             document.getElementById('amount-input').value = type === 'deposit' ? '1' : '3';
             document.getElementById('modal').style.display = 'flex';
-        }
+        };
 
-        function closeModal() {
+        window.closeModal = function() {
             document.getElementById('modal').style.display = 'none';
-        }
+        };
 
-        function submitAction() {
+        window.submitAction = async function() {
             const amount = parseFloat(document.getElementById('amount-input').value);
             closeModal();
 
             if (actionType === 'deposit') {
-                alert("Отправка запроса на сервер...");
-                API.topup(amount).then(res => {
+                try {
+                    const res = await apiRequest('/api/topup', 'GET', { amount: amount });
+                    alert("Ответ сервера: " + JSON.stringify(res));
                     if (res.pay_url) {
                         window.location.href = res.pay_url;
-                    } else {
-                        alert("Ошибка: сервер не вернул ссылку.");
                     }
-                }).catch(e => {
-                    alert("Ошибка: " + e.message);
-                });
+                } catch (e) {
+                    // Ошибка уже показана в apiRequest
+                }
             } else if (actionType === 'withdraw') {
-                API.withdraw(amount).then(res => {
+                try {
+                    const res = await apiRequest('/api/withdraw', 'POST', { amount: amount });
                     alert("Вывод успешен!");
                     updateBalanceUI();
-                }).catch(e => {
-                    alert("Ошибка вывода: " + e.message);
-                });
+                } catch (e) {
+                    // Ошибка уже показана
+                }
+            }
+        };
+
+        async function updateBalanceUI() {
+            const display = document.getElementById('balance-display');
+            if (!display) return;
+            try {
+                const data = await apiRequest('/api/balance');
+                display.textContent = parseFloat(data.balance).toFixed(2) + ' USDT';
+            } catch (error) {
+                display.textContent = "Ошибка";
             }
         }
+
+        // --- ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ---
+        window.addEventListener('load', () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            
+            // Если пришли после входа через Telegram
+            if (urlParams.has('id') && urlParams.has('hash')) {
+                localStorage.setItem('tg_user_id', urlParams.get('id'));
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }
+            
+            // Если уже авторизованы
+            if (getUserId()) {
+                document.getElementById('auth-container').style.display = 'none';
+                document.getElementById('balance-box').style.display = 'block';
+                updateBalanceUI();
+            }
+        });
     </script>
 </body>
 </html>
