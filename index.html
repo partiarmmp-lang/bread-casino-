@@ -8,32 +8,29 @@
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap');
         body { margin: 0; font-family: 'Montserrat', sans-serif; background: radial-gradient(circle at top, #1e1e38, #0a0a14); color: white; min-height: 100vh; }
         .header { display: flex; justify-content: space-between; align-items: center; padding: 20px; background: rgba(0,0,0,0.4); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100; border-bottom: 1px solid rgba(255,215,0,0.2); }
-        .logo { font-size: 22px; font-weight: 900; color: #ffd700; text-shadow: 0 0 15px rgba(255,215,0,0.6); letter-spacing: 1px; }
-        .balance-box { background: rgba(255,215,0,0.1); border: 1px solid #ffd700; padding: 8px 15px; border-radius: 20px; font-weight: bold; box-shadow: 0 0 10px rgba(255,215,0,0.2); }
+        .logo { font-size: 22px; font-weight: 900; color: #ffd700; text-shadow: 0 0 15px rgba(255,215,0,0.6); }
+        .balance-box { background: rgba(255,215,0,0.1); border: 1px solid #ffd700; padding: 8px 15px; border-radius: 20px; font-weight: bold; }
         .action-buttons { display: flex; gap: 15px; justify-content: center; padding: 20px; }
-        .btn { padding: 12px 25px; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; font-family: 'Montserrat', sans-serif; }
-        .btn:active { transform: scale(0.95); }
-        .btn-deposit { background: linear-gradient(135deg, #00c853, #009624); color: white; box-shadow: 0 4px 15px rgba(0,200,83,0.4); }
-        .btn-withdraw { background: linear-gradient(135deg, #d32f2f, #9a0007); color: white; box-shadow: 0 4px 15px rgba(211,47,47,0.4); }
+        .btn { padding: 12px 25px; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; }
+        .btn-deposit { background: #00c853; color: white; }
+        .btn-withdraw { background: #d32f2f; color: white; }
         
         .games-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; padding: 20px; max-width: 600px; margin: 0 auto; }
-        .game-card { background: linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01)); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 30px 20px; text-align: center; cursor: pointer; text-decoration: none; color: white; display: flex; flex-direction: column; align-items: center; transition: 0.3s; }
-        .game-card:hover { border-color: #ffd700; box-shadow: 0 10px 25px rgba(255,215,0,0.2); }
+        .game-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 30px 20px; text-align: center; text-decoration: none; color: white; display: flex; flex-direction: column; align-items: center; }
         .game-icon { font-size: 50px; margin-bottom: 15px; }
         .game-title { font-size: 18px; font-weight: 700; }
         #auth-container { display: flex; align-items: center; }
 
-        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; backdrop-filter: blur(5px); }
-        .modal-content { background: #1e1e38; padding: 30px; border-radius: 20px; width: 80%; max-width: 350px; text-align: center; border: 1px solid rgba(255,215,0,0.3); }
-        .modal-content h3 { margin-top: 0; color: #ffd700; }
-        .modal-input { width: 100%; padding: 15px; margin: 15px 0; border-radius: 10px; border: 1px solid #444; background: #0a0a14; color: white; font-size: 18px; text-align: center; box-sizing: border-box; }
+        /* Простое модальное окно */
+        #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: #1e1e38; padding: 30px; border-radius: 20px; width: 80%; max-width: 300px; text-align: center; }
+        input { width: 100%; padding: 15px; margin: 15px 0; border-radius: 10px; border: none; background: #0a0a14; color: white; font-size: 18px; text-align: center; box-sizing: border-box; }
         .modal-btn { width: 100%; padding: 15px; margin-top: 10px; border: none; border-radius: 10px; background: #00c853; color: white; font-weight: bold; font-size: 16px; cursor: pointer; }
-        .modal-close { background: #555; margin-top: 10px; }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="logo">🍞 BREAD CASINO</div>
+        <div class="logo">🍞 BREAD</div>
         <div id="auth-container">
             <script async src="https://telegram.org/js/telegram-widget.js?22" data-telegram-login="Poblatoh_bot" data-size="medium" data-radius="10" data-auth-url="https://partiarmmp-lang.github.io/bread-casino-/" data-request-access="write"></script>
         </div>
@@ -62,91 +59,69 @@
         </a>
     </div>
 
-    <div class="modal-overlay" id="payment-modal">
+    <!-- Модальное окно -->
+    <div id="modal">
         <div class="modal-content">
             <h3 id="modal-title">Пополнение</h3>
-            <input type="number" id="modal-amount" class="modal-input" value="1" step="0.1" min="0.05">
-            <button class="modal-btn" id="modal-action-btn" onclick="confirmAction()">Оплатить</button>
-            <button class="modal-btn modal-close" onclick="closeModal()">Отмена</button>
+            <input type="number" id="amount-input" value="1" step="0.1">
+            <button class="modal-btn" onclick="submitAction()">Подтвердить</button>
+            <button class="modal-btn" style="background: #555;" onclick="closeModal()">Отмена</button>
         </div>
     </div>
 
     <script src="assets/js/api.js"></script>
     <script>
+        // Проверка входа
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has('id') && urlParams.has('hash')) {
             localStorage.setItem('tg_user_id', urlParams.get('id'));
             window.history.replaceState({}, document.title, window.location.pathname);
-            initUser();
-        } else if (localStorage.getItem('tg_user_id')) {
-            initUser();
         }
-
-        function initUser() {
+        
+        if (localStorage.getItem('tg_user_id')) {
             document.getElementById('auth-container').style.display = 'none';
             document.getElementById('balance-box').style.display = 'block';
             updateBalanceUI();
         }
 
-        let currentAction = '';
+        let actionType = '';
 
         function openModal(type) {
             if (!localStorage.getItem('tg_user_id')) {
-                alert("Пожалуйста, войдите через Telegram (нажмите кнопку вверху)!");
-                return;
+                return alert("Пожалуйста, войдите через Telegram!");
             }
-            currentAction = type;
-            const modal = document.getElementById('payment-modal');
-            const title = document.getElementById('modal-title');
-            const input = document.getElementById('modal-amount');
-            const btn = document.getElementById('modal-action-btn');
-
-            if (type === 'deposit') {
-                title.textContent = "Пополнение (USDT)";
-                btn.textContent = "Перейти к оплате";
-                btn.style.background = "#00c853";
-                input.value = "1";
-                input.min = "0.05";
-            } else {
-                title.textContent = "Вывод (мин. 3 USDT)";
-                btn.textContent = "Вывести";
-                btn.style.background = "#d32f2f";
-                input.value = "3";
-                input.min = "3";
-            }
-            modal.style.display = 'flex';
+            actionType = type;
+            document.getElementById('modal-title').textContent = type === 'deposit' ? 'Пополнение (USDT)' : 'Вывод (мин. 3 USDT)';
+            document.getElementById('amount-input').value = type === 'deposit' ? '1' : '3';
+            document.getElementById('modal').style.display = 'flex';
         }
 
         function closeModal() {
-            document.getElementById('payment-modal').style.display = 'none';
+            document.getElementById('modal').style.display = 'none';
         }
 
-        function confirmAction() {
-            const amount = parseFloat(document.getElementById('modal-amount').value);
-            
-            if (currentAction === 'deposit') {
-                if (amount < 0.05) return alert("Минимум 0.05 USDT");
-                
-                closeModal();
-                alert("Запрос на создание счета отправлен. Пожалуйста, подождите...");
-                
+        function submitAction() {
+            const amount = parseFloat(document.getElementById('amount-input').value);
+            closeModal();
+
+            if (actionType === 'deposit') {
+                alert("Отправка запроса на сервер...");
                 API.topup(amount).then(res => {
                     if (res.pay_url) {
                         window.location.href = res.pay_url;
                     } else {
-                        alert("Сервер не вернул ссылку на оплату. Попробуйте позже.");
+                        alert("Ошибка: сервер не вернул ссылку.");
                     }
                 }).catch(e => {
-                    alert("Ошибка при создании счета: " + e.message);
+                    alert("Ошибка: " + e.message);
                 });
-                
-            } else if (currentAction === 'withdraw') {
-                if (amount < 3) return alert("Минимум 3 USDT");
-                closeModal();
+            } else if (actionType === 'withdraw') {
                 API.withdraw(amount).then(res => {
-                    alert("Вывод успешен! Проверьте CryptoBot.");
+                    alert("Вывод успешен!");
                     updateBalanceUI();
-                }).catch(e => alert("Ошибка: " + e.message));
+                }).catch(e => {
+                    alert("Ошибка вывода: " + e.message);
+                });
             }
         }
     </script>
