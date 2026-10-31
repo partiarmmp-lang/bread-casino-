@@ -5,20 +5,21 @@ function getUserId() {
 }
 
 async function apiRequest(endpoint, method = 'GET', body = null) {
-    // Убираем Content-Type: application/json, чтобы Safari не делал OPTIONS
+    // Убираем Content-Type: application/json
     const headers = {
         'X-User-ID': getUserId()
     };
+    
     const options = { method, headers };
 
     if (body) {
-        // Отправляем как форму, а не как JSON
+        // Отправляем данные как HTML-форму (application/x-www-form-urlencoded)
+        // Это не требует OPTIONS-запроса
         const formData = new URLSearchParams();
         for (const key in body) {
             formData.append(key, body[key]);
         }
         options.body = formData;
-        // Этот Content-Type не требует проверки OPTIONS
         headers['Content-Type'] = 'application/x-www-form-urlencoded';
     }
 
