@@ -5,22 +5,17 @@ function getUserId() {
 }
 
 async function apiRequest(endpoint, method = 'GET', body = null) {
-    // Убираем Content-Type: application/json
-    const headers = {
-        'X-User-ID': getUserId()
-    };
-    
+    // Если это GET, добавляем параметры в URL
+    let url = `${API_URL}${endpoint}`;
+    const headers = { 'X-User-ID': getUserId() };
     const options = { method, headers };
 
-    if (body) {
-        // Отправляем данные как HTML-форму (application/x-www-form-urlencoded)
-        // Это не требует OPTIONS-запроса
-        const formData = new URLSearchParams();
-        for (const key in body) {
-            formData.append(key, body[key]);
-        }
-        options.body = formData;
-        headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    if (method === 'GET' && body) {
+        const params = new URLSearchParams(body).toString();
+        url += `?${params}`;
+    } else if (body) {
+        options.body = JSON.stringify(body);
+        headers['Content-Type'] = 'application/json';
     }
 
     const controller = new AbortController();
@@ -28,14 +23,8 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
     options.signal = controller.signal;
 
     try {
-        const response = await fetch(`${API_URL}${endpoint}`, options);
+        const response = await fetch(url, options);
         clearTimeout(timeoutId);
-        
-        const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-            throw new Error(`Сервер вернул ошибку ${response.status}. Проверьте логи Render.`);
-        }
-
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Ошибка сервера');
         return data;
@@ -48,7 +37,8 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
 
 const API = {
     getBalance: () => apiRequest('/api/balance'),
-    topup: (amount) => apiRequest('/api/topup', 'POST', { amount }),
+    // Меняем метод на GET для пополнения
+    topup: (amount) => apiRequest('/api/topup', 'GET', { amount }),
     checkPayment: (id) => apiRequest(`/api/check_payment/${id}`),
     withdraw: (amount) => apiRequest('/api/withdraw', 'POST', { amount })
 };
