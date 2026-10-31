@@ -10,14 +10,13 @@ from aiogram.utils.web_app import safe_parse_webapp_init_data
 from aiogram import Bot
 from database import init_db, get_balance, update_balance, get_total_balance, try_deduct_balance, log_tx
 
-# Импорт для xRocket (библиотека aiorocket2)
-from aiorocket2 import RocketPay
+# ИСПРАВЛЕНО: правильное имя класса
+from aiorocket2 import xRocketClient
 
 load_dotenv()
 XROCKET_TOKEN = os.getenv("XROCKET_TOKEN")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# --- 1. Один постоянный event loop на процесс ---
 _loop = asyncio.new_event_loop()
 asyncio.set_event_loop(_loop)
 
@@ -31,21 +30,18 @@ def run_async(coro):
     future = asyncio.run_coroutine_threadsafe(coro, _loop)
     return future.result()
 
-# --- 2. Инициализация xRocket ---
+# ИСПРАВЛЕНО: создаем клиент xRocketClient
 rocket = None
 
 async def _init_rocket():
     global rocket
-    # Инициализируем клиент с нашим токеном
-    rocket = RocketPay(token=XROCKET_TOKEN)
+    rocket = xRocketClient(api_key=XROCKET_TOKEN)
 
 run_async(_init_rocket())
 
-# --- 3. Flask + CORS ---
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 run_async(init_db())
-
 bot = Bot(token=BOT_TOKEN)
 
 def get_telegram_user_id():
@@ -60,8 +56,6 @@ def get_telegram_user_id():
             if parsed and parsed.user: return parsed.user.id
         except Exception: pass
     return None
-
-# --- 4. Эндпоинты ---
 
 @app.route("/api/balance")
 def api_balance():
@@ -80,21 +74,19 @@ def api_topup():
         return jsonify({"error": "Минимум 0.05 USDT"}), 400
 
     async def _create_invoice():
-        # Создаем счет в xRocket
-        # priceCurrency = валюта, в которой выставляется счет
-        # clientInvoiceId = уникальный ID, чтобы не было дублей
+        # ИСПРАВЛЕНО: параметры под xRocketClient
         return await rocket.create_invoice(
             amount=amount,
-            asset="USDT",
-            description=f"Пополнение баланса Bread Casino (ID: {user_id})",
-            client_invoice_id=f"topup_{user_id}_{int(time.time())}"
+            currency="USDT",
+            description=f"Bread Casino ID: {user_id}",
+            num_payments=1,
+            min_payment=0
         )
 
     try:
         invoice = run_async(_create_invoice())
-        # xRocket возвращает ссылку в поле link или mini_app_link
-        # В документации сказано, что нужно использовать telegramBotLink
-        pay_url = getattr(invoice, 'link', None) or getattr(invoice, 'bot_link', None)
+        # ИСПРАВЛЕНО: ссылка на оплату находится в поле invoice.link
+        pay_url = invoice.link
         
         if not pay_url:
             return jsonify({"error": "Не удалось получить ссылку на оплату"}), 500
@@ -114,15 +106,12 @@ def api_check_payment(invoice_id):
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
 
     async def _check():
-        # Получаем информацию о счете по его ID
         return await rocket.get_invoice(invoice_id)
 
     try:
         inv = run_async(_check())
-        # Проверяем статус (active, paid, expired, cancelled)
         if inv.status == "paid":
             amount = float(inv.price_amount)
-            # Начисляем баланс (можно добавить защиту от повторного начисления)
             run_async(update_balance(user_id, amount))
             run_async(log_tx(user_id, "deposit", amount, f"xrocket_{invoice_id}"))
             return jsonify({"paid": True, "amount": amount})
@@ -137,27 +126,31 @@ def api_withdraw():
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     data = request.get_json() or {}
     amount = float(data.get("amount", 0))
+    target_id = data.get("xrocket_id")
     
     if amount < 3.0: 
         return jsonify({"error": "Минимум 3 USDT"}), 400
+    
+    if not target_id:
+        return jsonify({"error": "Укажите ваш xRocket ID"}), 400
         
     if not run_async(try_deduct_balance(user_id, amount)):
         return jsonify({"error": "Недостаточно средств"}), 400
 
-    async def _transfer():
-        # ВАЖНО: Для вывода нужен адрес кошелька или xRocket ID пользователя.
-        # Если пользователь выводит на свой xRocket, можно использовать его Telegram ID.
-        # Здесь мы делаем выплату на внутренний ID xRocket (пользователь должен его знать).
-        # Для простоты предполагаем, что пользователь ввел свой xRocket ID в поле (пока заглушка).
-        # В реальности нужно добавить поле ввода xRocket ID на сайте.
-        # Пример: return await rocket.create_payout(user_id=user_id, asset="USDT", amount=amount)
-        raise Exception("Для вывода укажите ваш xRocket ID (функция в разработке)")
+    async def _payout():
+        # ИСПРАВЛЕНО: для вывода на внутренний ID xRocket
+        return await rocket.create_payout(
+            user_id=int(target_id),
+            currency="USDT",
+            amount=amount,
+            description=f"Withdraw from Bread Casino"
+        )
 
     try:
-        run_async(_transfer())
+        run_async(_payout())
+        run_async(log_tx(user_id, "withdraw", -amount, f"xrocket_payout_{target_id}"))
         return jsonify({"ok": True})
     except Exception as e:
-        # Возвращаем деньги, если вывод не удался
         run_async(update_balance(user_id, amount))
         return jsonify({"error": str(e)}), 500
 
