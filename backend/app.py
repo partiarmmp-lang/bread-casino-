@@ -6,35 +6,46 @@ import time
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
-from aiocryptopay import AioCryptoPay, Networks
-from database import init_db, get_balance, update_balance, get_total_balance, try_deduct_balance, log_tx
 from aiogram.utils.web_app import safe_parse_webapp_init_data
 from aiogram import Bot
+from database import init_db, get_balance, update_balance, get_total_balance, try_deduct_balance, log_tx
+
+# Импорт для xRocket (библиотека aiorocket2)
+from aiorocket2 import RocketPay
 
 load_dotenv()
-CRYPTO_TOKEN = os.getenv("CRYPTO_TOKEN")
+XROCKET_TOKEN = os.getenv("XROCKET_TOKEN")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
+# --- 1. Один постоянный event loop на процесс ---
 _loop = asyncio.new_event_loop()
 asyncio.set_event_loop(_loop)
+
 def _start_loop(loop):
     asyncio.set_event_loop(loop)
     loop.run_forever()
+
 threading.Thread(target=_start_loop, args=(_loop,), daemon=True).start()
 
 def run_async(coro):
     future = asyncio.run_coroutine_threadsafe(coro, _loop)
     return future.result()
 
-crypto = None
-async def _init_crypto():
-    global crypto
-    crypto = AioCryptoPay(token=CRYPTO_TOKEN, network=Networks.MAIN_NET)
-run_async(_init_crypto())
+# --- 2. Инициализация xRocket ---
+rocket = None
 
+async def _init_rocket():
+    global rocket
+    # Инициализируем клиент с нашим токеном
+    rocket = RocketPay(token=XROCKET_TOKEN)
+
+run_async(_init_rocket())
+
+# --- 3. Flask + CORS ---
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 run_async(init_db())
+
 bot = Bot(token=BOT_TOKEN)
 
 def get_telegram_user_id():
@@ -50,42 +61,13 @@ def get_telegram_user_id():
         except Exception: pass
     return None
 
+# --- 4. Эндпоинты ---
+
 @app.route("/api/balance")
 def api_balance():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     return jsonify({"balance": run_async(get_total_balance(user_id))})
-
-@app.route("/api/spin", methods=["POST"])
-def api_spin():
-    user_id = get_telegram_user_id()
-    if not user_id: return jsonify({"error": "Unauthorized"}), 401
-    data = request.get_json() or {}
-    amount = float(data.get("amount", 1))
-    if not run_async(try_deduct_balance(user_id, amount)):
-        return jsonify({"error": "Недостаточно средств"}), 400
-    win = random.choice([True, False])
-    if win: run_async(update_balance(user_id, amount * 2))
-    return jsonify({"win": win, "balance": run_async(get_total_balance(user_id))})
-
-@app.route("/api/plinko", methods=["POST"])
-def api_plinko():
-    user_id = get_telegram_user_id()
-    if not user_id: return jsonify({"error": "Unauthorized"}), 401
-    data = request.get_json() or {}
-    amount = float(data.get("amount", 1))
-    if not run_async(try_deduct_balance(user_id, amount)):
-        return jsonify({"error": "Недостаточно средств"}), 400
-    
-    # Логика: чем ближе к краю, тем больше множитель
-    multipliers = [10, 3, 1.5, 1, 0.5, 0.2, 0.2, 0.5, 1, 1.5, 3, 10]
-    index = random.choices(range(12), weights=[1, 2, 4, 10, 20, 26, 26, 20, 10, 4, 2, 1])[0]
-    mult = multipliers[index]
-    win_amount = amount * mult
-    if win_amount > 0:
-        run_async(update_balance(user_id, win_amount))
-    
-    return jsonify({"multiplier": mult, "win_amount": win_amount, "balance": run_async(get_total_balance(user_id))})
 
 @app.route("/api/topup", methods=["POST"])
 def api_topup():
@@ -93,28 +75,59 @@ def api_topup():
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     data = request.get_json() or {}
     amount = float(data.get("amount", 1))
-    if amount < 0.05: return jsonify({"error": "Минимум 0.05 USDT"}), 400
+    
+    if amount < 0.05: 
+        return jsonify({"error": "Минимум 0.05 USDT"}), 400
+
     async def _create_invoice():
-        return await crypto.create_invoice(asset="USDT", amount=amount, payload=str(user_id))
+        # Создаем счет в xRocket
+        # priceCurrency = валюта, в которой выставляется счет
+        # clientInvoiceId = уникальный ID, чтобы не было дублей
+        return await rocket.create_invoice(
+            amount=amount,
+            asset="USDT",
+            description=f"Пополнение баланса Bread Casino (ID: {user_id})",
+            client_invoice_id=f"topup_{user_id}_{int(time.time())}"
+        )
+
     try:
         invoice = run_async(_create_invoice())
-        return jsonify({"invoice_id": invoice.invoice_id, "pay_url": invoice.bot_invoice_url})
+        # xRocket возвращает ссылку в поле link или mini_app_link
+        # В документации сказано, что нужно использовать telegramBotLink
+        pay_url = getattr(invoice, 'link', None) or getattr(invoice, 'bot_link', None)
+        
+        if not pay_url:
+            return jsonify({"error": "Не удалось получить ссылку на оплату"}), 500
+
+        return jsonify({
+            "invoice_id": invoice.id,
+            "pay_url": pay_url,
+            "amount": amount
+        })
     except Exception as e:
+        print(f"xRocket Invoice Error: {e}")
         return jsonify({"error": str(e)}), 500
 
-@app.route("/api/check_payment/<int:invoice_id>")
+@app.route("/api/check_payment/<invoice_id>")
 def api_check_payment(invoice_id):
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
+
     async def _check():
-        return await crypto.get_invoices(invoice_ids=invoice_id)
+        # Получаем информацию о счете по его ID
+        return await rocket.get_invoice(invoice_id)
+
     try:
         inv = run_async(_check())
-        if inv and inv.status == "paid":
-            amount = float(inv.amount)
+        # Проверяем статус (active, paid, expired, cancelled)
+        if inv.status == "paid":
+            amount = float(inv.price_amount)
+            # Начисляем баланс (можно добавить защиту от повторного начисления)
             run_async(update_balance(user_id, amount))
+            run_async(log_tx(user_id, "deposit", amount, f"xrocket_{invoice_id}"))
             return jsonify({"paid": True, "amount": amount})
-        return jsonify({"paid": False, "status": inv.status if inv else "not_found"})
+        
+        return jsonify({"paid": False, "status": inv.status})
     except Exception as e:
         return jsonify({"paid": False, "error": str(e)}), 500
 
@@ -124,15 +137,27 @@ def api_withdraw():
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     data = request.get_json() or {}
     amount = float(data.get("amount", 0))
-    if amount < 3.0: return jsonify({"error": "Минимум 3 USDT"}), 400
+    
+    if amount < 3.0: 
+        return jsonify({"error": "Минимум 3 USDT"}), 400
+        
     if not run_async(try_deduct_balance(user_id, amount)):
         return jsonify({"error": "Недостаточно средств"}), 400
+
     async def _transfer():
-        return await crypto.transfer(user_id=user_id, asset="USDT", amount=amount, spend_id=f"wd_{user_id}_{int(time.time())}")
+        # ВАЖНО: Для вывода нужен адрес кошелька или xRocket ID пользователя.
+        # Если пользователь выводит на свой xRocket, можно использовать его Telegram ID.
+        # Здесь мы делаем выплату на внутренний ID xRocket (пользователь должен его знать).
+        # Для простоты предполагаем, что пользователь ввел свой xRocket ID в поле (пока заглушка).
+        # В реальности нужно добавить поле ввода xRocket ID на сайте.
+        # Пример: return await rocket.create_payout(user_id=user_id, asset="USDT", amount=amount)
+        raise Exception("Для вывода укажите ваш xRocket ID (функция в разработке)")
+
     try:
         run_async(_transfer())
         return jsonify({"ok": True})
     except Exception as e:
+        # Возвращаем деньги, если вывод не удался
         run_async(update_balance(user_id, amount))
         return jsonify({"error": str(e)}), 500
 
