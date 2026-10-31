@@ -69,7 +69,8 @@ def api_topup():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     
-    data = request.get_json() or {}
+    # Читаем и JSON, и форму
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
     try:
         amount = float(data.get("amount", 1))
     except (ValueError, TypeError):
@@ -129,7 +130,8 @@ def api_withdraw():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     
-    data = request.get_json() or {}
+    # Читаем и JSON, и форму
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
     try:
         amount = float(data.get("amount", 0))
     except (ValueError, TypeError):
