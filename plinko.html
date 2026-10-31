@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bread Plinko</title>
+    <style>
+        body { background: #1a1a2e; color: white; font-family: sans-serif; text-align: center; margin: 0; padding: 20px; }
+        .header { display: flex; justify-content: space-between; margin-bottom: 20px; font-weight: bold; color: #ffd700; }
+        #game-area { position: relative; height: 400px; background: rgba(255,255,255,0.05); border-radius: 15px; overflow: hidden; margin-bottom: 20px; }
+        .ball { position: absolute; width: 20px; height: 20px; background: #ffd700; border-radius: 50%; transition: all 0.1s linear; }
+        .controls { display: flex; gap: 10px; justify-content: center; }
+        button { padding: 10px 20px; border: none; border-radius: 8px; background: #00c853; color: white; font-weight: bold; cursor: pointer; }
+        button:disabled { background: gray; }
+        #result { font-size: 24px; color: #ffd700; margin-top: 10px; height: 30px; }
+        a { color: #aaa; text-decoration: none; display: block; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <span>🍞 BREAD PLINKO</span>
+        <span id="balance-display">Загрузка...</span>
+    </div>
+    
+    <div id="game-area">
+        <div class="ball" id="ball" style="left: 50%; top: 0%;"></div>
+    </div>
+
+    <div id="result"></div>
+
+    <div class="controls">
+        <input type="number" id="bet-amount" value="0.10" step="0.10" style="padding: 10px; border-radius: 8px; border: none; width: 80px;">
+        <button id="drop-btn" onclick="dropBall()">Бросить</button>
+    </div>
+
+    <a href="index.html">← Вернуться в меню</a>
+
+    <script src="assets/js/api.js"></script>
+    <script>
+        updateBalanceUI();
+
+        async function dropBall() {
+            const amount = parseFloat(document.getElementById('bet-amount').value);
+            if (amount < 0.01) return alert("Минимальная ставка 0.01 USDT");
+            
+            const btn = document.getElementById('drop-btn');
+            btn.disabled = true;
+            document.getElementById('result').textContent = "";
+
+            try {
+                // Запрос к серверу (там решается, куда упадет шарик)
+                const res = await API.playPlinko(amount);
+                
+                // Анимация
+                const ball = document.getElementById('ball');
+                let posX = 50;
+                let posY = 0;
+                
+                // Простая анимация падения
+                const interval = setInterval(() => {
+                    posY += 5;
+                    posX += (Math.random() - 0.5) * 4; // Рандомное отклонение
+                    ball.style.top = posY + '%';
+                    ball.style.left = posX + '%';
+                    
+                    if (posY >= 90) {
+                        clearInterval(interval);
+                        document.getElementById('result').textContent = `Множитель: x${res.multiplier} (Выигрыш: ${res.win_amount.toFixed(2)} USDT)`;
+                        document.getElementById('balance-display').textContent = res.balance.toFixed(2) + ' USDT';
+                        btn.disabled = false;
+                        setTimeout(() => {
+                            ball.style.top = '0%';
+                            ball.style.left = '50%';
+                        }, 1000);
+                    }
+                }, 20);
+                
+            } catch (e) {
+                alert(e.message);
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>
