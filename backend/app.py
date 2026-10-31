@@ -13,7 +13,9 @@ from database import init_db, get_total_balance, update_balance, try_deduct_bala
 from aiorocket2 import xRocketClient
 
 load_dotenv()
-XROCKET_TOKEN = os.getenv("XROCKET_TOKEN")
+
+# ТОКЕН ВСТАВЛЕН ПРЯМО В КОД (ВРЕМЕННО!)
+XROCKET_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNzM2MiIsImp0aSI6ImFwcDozMDczNjI6ZDJjN2I2NDYtYzc3OC00ZjA3LWFkNDYtMGZiNDhjZTU3ZDU4IiwiaWF0IjoxNzkzNDY4MjYxfQ.a_Ml3oa5mBXnAMcQZDBS_G9JO-yu_TtUt10hfe3gaKE"
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 _loop = asyncio.new_event_loop()
@@ -39,7 +41,14 @@ run_async(_init_rocket())
 
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
-run_async(init_db())
+
+# Пытаемся инициализировать БД, но не роняем сервер, если не вышло
+try:
+    run_async(init_db())
+    print("База данных успешно инициализирована.")
+except Exception as e:
+    print(f"ВНИМАНИЕ: Ошибка подключения к БД: {e}")
+
 bot = Bot(token=BOT_TOKEN)
 
 def get_telegram_user_id():
@@ -86,7 +95,6 @@ def api_topup():
         return jsonify({"error": "Минимум 0.05 USDT"}), 400
 
     async def _create_invoice():
-        # Передаем currency и amount, как в документации
         return await rocket.create_invoice(
             currency="USDT",
             amount=amount,
@@ -99,15 +107,10 @@ def api_topup():
     try:
         invoice = run_async(_create_invoice())
         
-        # Пытаемся найти ссылку во всех возможных полях
         pay_url = getattr(invoice, 'link', None) or getattr(invoice, 'url', None)
         
-        # Выводим в консоль Render для отладки
-        print(f"DEBUG: Invoice object: {invoice}")
-        print(f"DEBUG: Pay URL found: {pay_url}")
-
         if not pay_url:
-            return jsonify({"error": "Не удалось получить ссылку. Проверьте логи."}), 500
+            return jsonify({"error": f"Ссылка не найдена. Данные: {str(invoice)[:300]}"}), 500
 
         return jsonify({
             "invoice_id": invoice.id,
@@ -115,8 +118,7 @@ def api_topup():
             "amount": amount
         })
     except Exception as e:
-        print(f"xRocket Invoice Error: {e}")
-        return jsonify({"error": str(e)}), 500
+        return jsonify({"error": f"Ошибка xRocket: {str(e)}"}), 500
 
 @app.route("/api/check_payment/<invoice_id>")
 def api_check_payment(invoice_id):
