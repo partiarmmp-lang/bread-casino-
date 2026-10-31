@@ -5,7 +5,9 @@ function getUserId() {
 }
 
 async function apiRequest(endpoint, method = 'GET', body = null) {
+    // ВОЗВРАЩАЕМ Content-Type, иначе сервер вернет 415
     const headers = {
+        'Content-Type': 'application/json',
         'X-User-ID': getUserId()
     };
     const options = { method, headers };
@@ -19,13 +21,10 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
         const response = await fetch(`${API_URL}${endpoint}`, options);
         clearTimeout(timeoutId);
         
-        // Проверяем, что сервер вернул именно JSON
+        // Проверка, что сервер вернул JSON (защита от HTML-ошибок)
         const contentType = response.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
-            // Если пришел не JSON (например, HTML-ошибка), выбрасываем понятную ошибку
-            const text = await response.text();
-            console.error("Сервер вернул не JSON:", text.substring(0, 100));
-            throw new Error("Сервер вернул ошибку. Проверьте логи Render.");
+            throw new Error(`Сервер вернул ошибку ${response.status}. Проверьте логи Render.`);
         }
 
         const data = await response.json();
