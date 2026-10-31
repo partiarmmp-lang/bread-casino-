@@ -1,5 +1,6 @@
 import asyncio
 import os
+import re
 import threading
 import time
 from flask import Flask, request, jsonify
@@ -9,14 +10,12 @@ from aiogram.utils.web_app import safe_parse_webapp_init_data
 from aiogram import Bot
 from database import init_db, get_total_balance, update_balance, try_deduct_balance, log_tx
 
-# Импортируем правильный класс из библиотеки
 from aiorocket2 import xRocketClient
 
 load_dotenv()
 XROCKET_TOKEN = os.getenv("XROCKET_TOKEN")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# --- 1. Постоянный event loop ---
 _loop = asyncio.new_event_loop()
 asyncio.set_event_loop(_loop)
 
@@ -30,7 +29,6 @@ def run_async(coro):
     future = asyncio.run_coroutine_threadsafe(coro, _loop)
     return future.result()
 
-# --- 2. Инициализация клиента xRocket ---
 rocket = None
 
 async def _init_rocket():
@@ -39,17 +37,22 @@ async def _init_rocket():
 
 run_async(_init_rocket())
 
-# --- 3. Flask ---
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 run_async(init_db())
 bot = Bot(token=BOT_TOKEN)
 
 def get_telegram_user_id():
+    # 1. Проверяем заголовок X-User-ID (приходит с сайта)
     user_id_header = request.headers.get("X-User-ID")
     if user_id_header:
-        try: return int(user_id_header)
-        except ValueError: pass
+        # Убираем всё, кроме цифр (на случай пробелов или скрытых символов)
+        clean_id = re.sub(r'\D', '', str(user_id_header))
+        if clean_id:
+            try: return int(clean_id)
+            except ValueError: pass
+            
+    # 2. Проверяем initData (если открыто в Telegram)
     init_data = request.headers.get("X-Telegram-Init-Data")
     if init_data:
         try:
@@ -57,8 +60,6 @@ def get_telegram_user_id():
             if parsed and parsed.user: return parsed.user.id
         except Exception: pass
     return None
-
-# --- 4. Эндпоинты ---
 
 @app.route("/api/balance")
 def api_balance():
@@ -70,28 +71,31 @@ def api_balance():
 def api_topup():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
+    
     data = request.get_json() or {}
-    amount = float(data.get("amount", 1))
+    try:
+        amount = float(data.get("amount", 1))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Неверная сумма"}), 400
     
     if amount < 0.05: 
         return jsonify({"error": "Минимум 0.05 USDT"}), 400
 
     async def _create_invoice():
-        # Создаем счет с правильными параметрами для aiorocket2
+        # Создаем счет с правильными типами данных
         return await rocket.create_invoice(
             currency="USDT",
             amount=amount,
             description=f"Bread Casino ID: {user_id}",
             hidden_message="Спасибо за пополнение!",
-            num_payments=1,
-            min_payment=0
+            num_payments=1
         )
 
     try:
         invoice = run_async(_create_invoice())
         
-        # В библиотеке aiorocket2 ссылка на оплату находится в поле invoice.link
-        pay_url = invoice.link
+        # В библиотеке aiorocket2 ссылка на оплату находится в поле link
+        pay_url = getattr(invoice, 'link', None)
         
         if not pay_url:
             return jsonify({"error": "Не удалось получить ссылку на оплату"}), 500
@@ -115,7 +119,6 @@ def api_check_payment(invoice_id):
 
     try:
         inv = run_async(_check())
-        # Статус "paid" означает успешную оплату [citation:2]
         if inv.status == "paid":
             amount = float(inv.price_amount)
             run_async(update_balance(user_id, amount))
@@ -130,8 +133,13 @@ def api_check_payment(invoice_id):
 def api_withdraw():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
+    
     data = request.get_json() or {}
-    amount = float(data.get("amount", 0))
+    try:
+        amount = float(data.get("amount", 0))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Неверная сумма"}), 400
+        
     target_id = data.get("xrocket_id")
     
     if amount < 3.0: 
@@ -144,7 +152,6 @@ def api_withdraw():
         return jsonify({"error": "Недостаточно средств"}), 400
 
     async def _payout():
-        # Выплата на внутренний ID xRocket
         return await rocket.create_payout(
             user_id=int(target_id),
             currency="USDT",
