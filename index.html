@@ -62,11 +62,11 @@
         </div>
     </div>
 
-    <!-- Лоадер (загрузка) -->
+    <!-- Лоадер -->
     <div id="loader">
         <div class="spinner"></div>
-        <div style="color: #ffd700; font-weight: bold;">Пробуждаем сервер...</div>
-        <div style="color: #aaa; font-size: 12px; margin-top: 10px; text-align: center; padding: 0 20px;">Это может занять до 50 секунд, так как сервер бесплатный и засыпает.</div>
+        <div style="color: #ffd700; font-weight: bold;">Обработка запроса...</div>
+        <div style="color: #aaa; font-size: 12px; margin-top: 10px; text-align: center; padding: 0 20px;">Пожалуйста, подождите, мы готовим ваш счет.</div>
     </div>
 
     <script>
@@ -76,7 +76,6 @@
             return localStorage.getItem('tg_user_id') || '';
         }
 
-        // Функция для показа/скрытия лоадера
         function showLoader() { document.getElementById('loader').style.display = 'flex'; }
         function hideLoader() { document.getElementById('loader').style.display = 'none'; }
 
@@ -130,14 +129,14 @@
         window.submitAction = async function() {
             const amount = parseFloat(document.getElementById('amount-input').value);
             closeModal();
-            showLoader(); // Показываем загрузку
+            showLoader();
 
             if (actionType === 'deposit') {
                 try {
-                    // 1. Просто "будим" сервер (неважно, что он ответит)
-                    try { await apiRequest('/api/balance'); } catch (e) { /* Игнорируем ошибку пробуждения */ }
+                    // 1. Пробуждаем сервер (игнорируем ошибки)
+                    try { await apiRequest('/api/balance'); } catch (e) { }
                     
-                    // 2. Когда сервер проснулся, делаем запрос на пополнение
+                    // 2. Запрос на пополнение
                     const res = await apiRequest('/api/topup', 'GET', { amount: amount });
                     
                     if (res.pay_url) {
@@ -145,23 +144,22 @@
                         window.location.href = res.pay_url;
                     } else {
                         hideLoader();
-                        alert("Сервер не вернул ссылку. Ответ: " + JSON.stringify(res));
+                        alert("Сервер не вернул ссылку.");
                     }
                 } catch (e) {
                     hideLoader();
-                    alert("Ошибка при пополнении: " + e.message);
+                    alert("Ошибка: " + e.message);
                 }
             } else if (actionType === 'withdraw') {
                 try {
                     try { await apiRequest('/api/balance'); } catch (e) {}
-                    
                     const res = await apiRequest('/api/withdraw', 'POST', { amount: amount });
                     hideLoader();
                     alert("Вывод успешен!");
                     updateBalanceUI();
                 } catch (e) {
                     hideLoader();
-                    alert("Ошибка вывода: " + e.message);
+                    alert("Ошибка: " + e.message);
                 }
             }
         };
