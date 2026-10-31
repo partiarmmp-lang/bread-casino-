@@ -6,7 +6,6 @@ function getInitData() {
     if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) {
         return window.Telegram.WebApp.initData;
     }
-    // Если открыто в браузере, пробуем достать из localStorage (сохраняется после входа)
     return localStorage.getItem('tg_init_data') || '';
 }
 
@@ -42,15 +41,24 @@ const API = {
     spinRoulette: (color, amount) => apiRequest('/api/spin', 'POST', { color, amount })
 };
 
-// Функция для обновления баланса на странице
+// Функция для обновления баланса на странице (БЕЗ КЭША)
 async function updateBalanceUI() {
+    const balanceElements = document.querySelectorAll('.balance-amount');
+    
+    // Если нет данных Telegram, не дергаем сервер
+    if (!getInitData()) {
+        balanceElements.forEach(el => el.textContent = 'Войдите');
+        return;
+    }
+
     try {
+        // Всегда запрашиваем свежий баланс с сервера
         const data = await API.getBalance();
-        const balanceElements = document.querySelectorAll('.balance-amount');
         balanceElements.forEach(el => {
-            el.textContent = data.balance.toFixed(2) + ' USDT';
+            el.textContent = parseFloat(data.balance).toFixed(2) + ' USDT';
         });
     } catch (error) {
-        console.error('Не удалось получить баланс');
+        console.error('Не удалось получить баланс', error);
+        balanceElements.forEach(el => el.textContent = 'Ошибка');
     }
 }
