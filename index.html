@@ -30,14 +30,7 @@
     <div class="header">
         <div class="logo">🍞 BREAD</div>
         <div id="auth-container">
-            <!-- Скрипт Telegram вынесен отдельно -->
-            <script async src="https://telegram.org/js/telegram-widget.js?22" 
-                    data-telegram-login="Poblatoh_bot" 
-                    data-size="medium" 
-                    data-radius="10" 
-                    data-auth-url="https://partiarmmp-lang.github.io/bread-casino-/" 
-                    data-request-access="write">
-            </script>
+            <script async src="https://telegram.org/js/telegram-widget.js?22" data-telegram-login="Poblatoh_bot" data-size="medium" data-radius="10" data-auth-url="https://partiarmmp-lang.github.io/bread-casino-/" data-request-access="write"></script>
         </div>
         <div class="balance-box" id="balance-box" style="display: none;">
             💰 <span id="balance-display">0.00</span> USDT
@@ -65,10 +58,8 @@
     </div>
 
     <script>
-        // --- НАСТРОЙКИ ---
         const API_URL = 'https://bread-casino-14.onrender.com';
 
-        // --- API ЗАПРОСЫ ---
         function getUserId() {
             return localStorage.getItem('tg_user_id') || '';
         }
@@ -77,33 +68,39 @@
             let url = API_URL + endpoint;
             const userId = getUserId();
             
-            // Добавляем user_id в URL
             if (userId) {
                 url += (url.includes('?') ? '&' : '?') + 'user_id=' + userId;
             }
 
-            // Для GET запросов добавляем параметры в URL
             if (method === 'GET' && body) {
                 for (const key in body) {
                     url += '&' + key + '=' + encodeURIComponent(body[key]);
                 }
             }
 
-            // Показываем, куда уходит запрос
-            alert("Отправляю запрос на:\n" + url);
-
             try {
                 const response = await fetch(url, { method: method });
-                const data = await response.json();
-                if (!response.ok) throw new Error(data.error || 'Ошибка сервера');
+                
+                // Читаем ответ как текст, чтобы увидеть ошибку, даже если это не JSON
+                const text = await response.text();
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    // Если это не JSON, значит сервер вернул HTML-ошибку (например, 500)
+                    throw new Error("Сервер вернул HTML вместо JSON. Код: " + response.status + ". Текст: " + text.substring(0, 50));
+                }
+
+                if (!response.ok) {
+                    throw new Error(data.error || "Ошибка сервера: " + response.status);
+                }
                 return data;
             } catch (error) {
-                alert("Ошибка сети: " + error.message);
+                alert("ОШИБКА: " + error.message);
                 throw error;
             }
         }
 
-        // --- ЛОГИКА ---
         let actionType = '';
 
         window.openModal = function(type) {
@@ -127,9 +124,11 @@
             if (actionType === 'deposit') {
                 try {
                     const res = await apiRequest('/api/topup', 'GET', { amount: amount });
-                    alert("Ответ сервера: " + JSON.stringify(res));
                     if (res.pay_url) {
+                        // Перекидываем на оплату
                         window.location.href = res.pay_url;
+                    } else {
+                        alert("Сервер не вернул ссылку на оплату. Ответ: " + JSON.stringify(res));
                     }
                 } catch (e) {
                     // Ошибка уже показана в apiRequest
@@ -156,17 +155,12 @@
             }
         }
 
-        // --- ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ---
         window.addEventListener('load', () => {
             const urlParams = new URLSearchParams(window.location.search);
-            
-            // Если пришли после входа через Telegram
             if (urlParams.has('id') && urlParams.has('hash')) {
                 localStorage.setItem('tg_user_id', urlParams.get('id'));
                 window.history.replaceState({}, document.title, window.location.pathname);
             }
-            
-            // Если уже авторизованы
             if (getUserId()) {
                 document.getElementById('auth-container').style.display = 'none';
                 document.getElementById('balance-box').style.display = 'block';
