@@ -12,12 +12,19 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
     const options = { method, headers };
     if (body) options.body = JSON.stringify(body);
 
+    // Увеличиваем время ожидания до 60 секунд, чтобы сервер успел проснуться
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 60000); 
+    options.signal = controller.signal;
+
     try {
         const response = await fetch(`${API_URL}${endpoint}`, options);
+        clearTimeout(timeoutId);
         const data = await response.json();
         if (!response.ok) throw new Error(data.error || 'Ошибка сервера');
         return data;
     } catch (error) {
+        clearTimeout(timeoutId);
         console.error('API Error:', error);
         throw error;
     }
