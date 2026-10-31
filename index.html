@@ -60,13 +60,8 @@
             <div class="game-icon">🚀</div>
             <div class="game-title">CRASH</div>
         </a>
-        <a href="site.html" class="game-card">
-            <div class="game-icon">🎲</div>
-            <div class="game-title">ВСЕ ИГРЫ</div>
-        </a>
     </div>
 
-    <!-- Модальное окно -->
     <div class="modal-overlay" id="payment-modal">
         <div class="modal-content">
             <h3 id="modal-title">Пополнение</h3>
@@ -132,28 +127,17 @@
             if (currentAction === 'deposit') {
                 if (amount < 0.05) return alert("Минимум 0.05 USDT");
                 
-                // Открываем пустую вкладку СРАЗУ (пока браузер не заблокировал)
-                const newWindow = window.open('', '_blank');
                 closeModal();
+                alert("Запрос на создание счета отправлен. Пожалуйста, подождите...");
                 
                 API.topup(amount).then(res => {
                     if (res.pay_url) {
-                        if (newWindow) {
-                            newWindow.location.href = res.pay_url;
-                        } else {
-                            window.location.href = res.pay_url;
-                        }
-                        
-                        setTimeout(() => {
-                            API.checkPayment(res.invoice_id).then(check => {
-                                if (check.paid) { alert("Баланс пополнен!"); updateBalanceUI(); }
-                                else { alert("Оплата еще не поступила."); }
-                            });
-                        }, 5000);
+                        window.location.href = res.pay_url;
+                    } else {
+                        alert("Сервер не вернул ссылку на оплату. Попробуйте позже.");
                     }
                 }).catch(e => {
-                    if (newWindow) newWindow.close();
-                    alert("Ошибка: " + e.message);
+                    alert("Ошибка при создании счета: " + e.message);
                 });
                 
             } else if (currentAction === 'withdraw') {
