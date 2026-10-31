@@ -6,3 +6,4 @@ aiosqlite
 aiogram
 gunicorn
 asyncpg
+aiorocket2
