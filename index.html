@@ -56,6 +56,7 @@
 
     <script src="assets/js/api.js"></script>
     <script>
+        // Проверка авторизации при загрузке
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has('id') && urlParams.has('hash')) {
             localStorage.setItem('tg_user_id', urlParams.get('id'));
@@ -71,28 +72,48 @@
             updateBalanceUI();
         }
 
+        // Пополнение
         function showTopup() {
-            if (!localStorage.getItem('tg_user_id')) return alert("Сначала войдите!");
-            let amount = prompt("Сумма пополнения (USDT):", "1");
-            if (amount) {
-                API.topup(parseFloat(amount)).then(res => {
+            if (!localStorage.getItem('tg_user_id')) return alert("Пожалуйста, войдите через Telegram!");
+            
+            let amount = prompt("Введите сумму пополнения в USDT (мин. 0.05):", "1");
+            if (amount && !isNaN(amount)) {
+                amount = parseFloat(amount);
+                if (amount < 0.05) return alert("Минимальная сумма 0.05 USDT");
+
+                API.topup(amount).then(res => {
+                    // Открываем ссылку на оплату в CryptoBot
                     window.open(res.pay_url, '_blank');
+                    alert("Оплатите счет в открывшемся окне. После оплаты нажмите ОК.");
+                    
+                    // Проверяем оплату через 5 секунд
                     setTimeout(() => {
                         API.checkPayment(res.invoice_id).then(check => {
-                            if (check.paid) { alert("Баланс пополнен!"); updateBalanceUI(); }
+                            if (check.paid) { 
+                                alert("Баланс успешно пополнен!"); 
+                                updateBalanceUI(); 
+                            } else {
+                                alert("Оплата еще не поступила. Если вы оплатили, подождите пару минут и обновите страницу.");
+                            }
                         });
                     }, 5000);
-                }).catch(e => alert(e.message));
+                }).catch(e => alert("Ошибка при создании счета: " + e.message));
             }
         }
 
+        // Вывод
         function showWithdraw() {
-            if (!localStorage.getItem('tg_user_id')) return alert("Сначала войдите!");
-            let amount = prompt("Сумма вывода (мин. 3 USDT):", "3");
-            if (amount) {
-                API.withdraw(parseFloat(amount)).then(res => {
-                    alert("Вывод успешен!"); updateBalanceUI();
-                }).catch(e => alert(e.message));
+            if (!localStorage.getItem('tg_user_id')) return alert("Пожалуйста, войдите через Telegram!");
+            
+            let amount = prompt("Введите сумму вывода в USDT (минимум 3 USDT):", "3");
+            if (amount && !isNaN(amount)) {
+                amount = parseFloat(amount);
+                if (amount < 3.0) return alert("Минимальная сумма для вывода — 3 USDT");
+
+                API.withdraw(amount).then(res => {
+                    alert("Вывод успешно выполнен! Проверьте ваш CryptoBot.");
+                    updateBalanceUI();
+                }).catch(e => alert("Ошибка при выводе: " + e.message));
             }
         }
     </script>
