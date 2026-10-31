@@ -1,133 +1,175 @@
-import asyncpg
+import asyncio
 import os
-import secrets
-import string
-import datetime
+import re
+import threading
+import time
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+from dotenv import load_dotenv
+from aiogram.utils.web_app import safe_parse_webapp_init_data
+from aiogram import Bot
+from database import init_db, get_total_balance, update_balance, try_deduct_balance, log_tx
 
-DB_URL = os.environ.get('DATABASE_URL', 'postgresql://postgres.nweygfqvmlwdmdnddxre:Dundel2009!.@aws-1-eu-west-3.pooler.supabase.com:6543/postgres')
-_pool = None
+from aiorocket2 import xRocketClient
 
-async def get_pool():
-    global _pool
-    if _pool is None:
-        _pool = await asyncpg.create_pool(DB_URL)
-    return _pool
+load_dotenv()
 
-def _uid(user_id):
-    try: return int(user_id)
-    except (ValueError, TypeError): return abs(hash(str(user_id))) % (10**15)
+# ТОКЕН ВСТАВЛЕН ПРЯМО В КОД (ВРЕМЕННО!)
+XROCKET_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNzM2MiIsImp0aSI6ImFwcDozMDczNjI6ZDJjN2I2NDYtYzc3OC00ZjA3LWFkNDYtMGZiNDhjZTU3ZDU4IiwiaWF0IjoxNzkzNDY4MjYxfQ.a_Ml3oa5mBXnAMcQZDBS_G9JO-yu_TtUt10hfe3gaKE"
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-def _gen_code(length=10):
-    alphabet = string.ascii_uppercase + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(length))
+_loop = asyncio.new_event_loop()
+asyncio.set_event_loop(_loop)
 
-async def init_db():
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("""CREATE TABLE IF NOT EXISTS users (user_id BIGINT PRIMARY KEY, balance DOUBLE PRECISION DEFAULT 0.0, bonus_balance DOUBLE PRECISION DEFAULT 0.0, wager_required DOUBLE PRECISION DEFAULT 0.0, wager_done DOUBLE PRECISION DEFAULT 0.0, referrer_id BIGINT, ref_earnings DOUBLE PRECISION DEFAULT 0.0, total_deposits DOUBLE PRECISION DEFAULT 0.0, total_lost DOUBLE PRECISION DEFAULT 0.0, deposit_count INTEGER DEFAULT 0, first_deposit_done INTEGER DEFAULT 0, roulette_freespins INTEGER DEFAULT 0, free_lottery_tickets INTEGER DEFAULT 0, channel_bonus_given INTEGER DEFAULT 0, referrer_lvl2 BIGINT, referrer_lvl3 BIGINT, luck_points INTEGER DEFAULT 0, luck_total INTEGER DEFAULT 0, weekly_lost DOUBLE PRECISION DEFAULT 0.0, monthly_deposits DOUBLE PRECISION DEFAULT 0.0, total_bonus_purchases DOUBLE PRECISION DEFAULT 0.0, bonus_purchase_count INTEGER DEFAULT 0, language TEXT DEFAULT NULL, coins INTEGER DEFAULT 0, energy INTEGER DEFAULT 100, energy_limit INTEGER DEFAULT 100, last_energy_reset TIMESTAMP DEFAULT CURRENT_TIMESTAMP, last_daily_bonus TIMESTAMP DEFAULT NULL, pending_deposit_bonus DOUBLE PRECISION DEFAULT 0.0, daily_streak INTEGER DEFAULT 0, last_streak_day TEXT, last_wheel_spin TEXT, wheel_total_spins INTEGER DEFAULT 0)""")
-        await db.execute("""CREATE TABLE IF NOT EXISTS luck_log (id SERIAL PRIMARY KEY, user_id BIGINT, reward TEXT, amount DOUBLE PRECISION, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
-        await db.execute("""CREATE TABLE IF NOT EXISTS transactions (id SERIAL PRIMARY KEY, user_id BIGINT, type TEXT NOT NULL, amount DOUBLE PRECISION NOT NULL, meta TEXT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
-        await db.execute("CREATE INDEX IF NOT EXISTS idx_tx_user ON transactions(user_id, id DESC)")
-        await db.execute("""CREATE TABLE IF NOT EXISTS promocodes (code TEXT PRIMARY KEY, amount DOUBLE PRECISION NOT NULL, max_uses INTEGER NOT NULL, uses INTEGER DEFAULT 0, created_by BIGINT, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
-        await db.execute("""CREATE TABLE IF NOT EXISTS promo_activations (code TEXT NOT NULL, user_id BIGINT NOT NULL, activated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (code, user_id))""")
-        await db.execute("""CREATE TABLE IF NOT EXISTS checks (code TEXT PRIMARY KEY, amount DOUBLE PRECISION NOT NULL, created_by BIGINT, claimed_by BIGINT, claimed_at TIMESTAMP, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""")
+def _start_loop(loop):
+    asyncio.set_event_loop(loop)
+    loop.run_forever()
 
-async def get_language(user_id):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT language FROM users WHERE user_id = $1", _uid(user_id))
-        return row['language'] if row else None
+threading.Thread(target=_start_loop, args=(_loop,), daemon=True).start()
 
-async def set_language(user_id, lang: str):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-        await db.execute("UPDATE users SET language = $1 WHERE user_id = $2", lang, _uid(user_id))
+def run_async(coro):
+    future = asyncio.run_coroutine_threadsafe(coro, _loop)
+    return future.result()
 
-async def log_tx(user_id, tx_type: str, amount: float, meta: str = ""):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO transactions (user_id, type, amount, meta) VALUES ($1, $2, $3, $4)", _uid(user_id), tx_type, amount, meta)
+rocket = None
 
-async def get_transactions(user_id, limit: int = 15):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        rows = await db.fetch("SELECT type, amount, meta, created_at FROM transactions WHERE user_id = $1 ORDER BY id DESC LIMIT $2", _uid(user_id), limit)
-        return [(r['type'], r['amount'], r['meta'], r['created_at']) for r in rows]
+async def _init_rocket():
+    global rocket
+    rocket = xRocketClient(api_key=XROCKET_TOKEN)
 
-async def is_new_user(user_id) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT user_id FROM users WHERE user_id = $1", _uid(user_id))
-        return row is None
+run_async(_init_rocket())
 
-async def get_balance(user_id) -> float:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT balance FROM users WHERE user_id = $1", _uid(user_id))
-        if row is None:
-            await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-            return 0.0
-        return row['balance'] or 0.0
+app = Flask(__name__)
+CORS(app, resources={r"/api/*": {"origins": "*"}})
+run_async(init_db())
+bot = Bot(token=BOT_TOKEN)
 
-async def get_bonus_balance(user_id) -> float:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT bonus_balance FROM users WHERE user_id = $1", _uid(user_id))
-        return (row['bonus_balance'] or 0.0) if row else 0.0
+def get_telegram_user_id():
+    user_id_arg = request.args.get("user_id")
+    if user_id_arg:
+        clean_id = re.sub(r'\D', '', str(user_id_arg))
+        if clean_id:
+            try: return int(clean_id)
+            except ValueError: pass
 
-async def get_wager_info(user_id):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT wager_required, wager_done FROM users WHERE user_id = $1", _uid(user_id))
-        return (row['wager_required'] or 0.0, row['wager_done'] or 0.0) if row else (0.0, 0.0)
+    user_id_header = request.headers.get("X-User-ID")
+    if user_id_header:
+        clean_id = re.sub(r'\D', '', str(user_id_header))
+        if clean_id:
+            try: return int(clean_id)
+            except ValueError: pass
+            
+    init_data = request.headers.get("X-Telegram-Init-Data")
+    if init_data:
+        try:
+            parsed = safe_parse_webapp_init_data(token=BOT_TOKEN, init_data=init_data)
+            if parsed and parsed.user: return parsed.user.id
+        except Exception: pass
+    return None
 
-async def get_total_balance(user_id) -> float:
-    return await get_balance(user_id) + await get_bonus_balance(user_id)
+@app.route("/api/balance")
+def api_balance():
+    user_id = get_telegram_user_id()
+    if not user_id: return jsonify({"error": "Unauthorized"}), 401
+    return jsonify({"balance": run_async(get_total_balance(user_id))})
 
-async def update_balance(user_id, amount: float):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-        await db.execute("UPDATE users SET balance = balance + $1 WHERE user_id = $2", amount, _uid(user_id))
+@app.route("/api/topup", methods=["GET", "POST"])
+def api_topup():
+    user_id = get_telegram_user_id()
+    if not user_id: return jsonify({"error": "Unauthorized"}), 401
+    
+    data = request.get_json(silent=True) or request.args.to_dict() or request.form.to_dict() or {}
+    try:
+        amount = float(data.get("amount", 1))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Неверная сумма"}), 400
+    
+    if amount < 0.05: 
+        return jsonify({"error": "Минимум 0.05 USDT"}), 400
 
-async def try_deduct_balance(user_id, amount: float) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-        res = await db.execute("UPDATE users SET balance = balance - $1 WHERE user_id = $2 AND balance >= $1", amount, _uid(user_id))
-        return res == "UPDATE 1"
+    async def _create_invoice():
+        return await rocket.create_invoice(
+            currency="USDT",
+            amount=amount,
+            min_payment=0,
+            num_payments=1,
+            description=f"Bread Casino ID: {user_id}",
+            hidden_message="Спасибо за пополнение!"
+        )
 
-async def try_deduct_bonus(user_id, amount: float) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        res = await db.execute("UPDATE users SET bonus_balance = bonus_balance - $1 WHERE user_id = $2 AND bonus_balance >= $1", amount, _uid(user_id))
-        return res == "UPDATE 1"
+    try:
+        invoice = run_async(_create_invoice())
+        
+        pay_url = getattr(invoice, 'link', None) or getattr(invoice, 'url', None)
+        
+        if not pay_url:
+            return jsonify({"error": f"Ссылка не найдена. Данные: {str(invoice)[:300]}"}), 500
 
-async def add_bonus(user_id, amount: float, wager_multiplier: float = 3.0):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-        await db.execute("UPDATE users SET bonus_balance = bonus_balance + $1, wager_required = wager_required + $2 WHERE user_id = $3", amount, amount * wager_multiplier, _uid(user_id))
+        return jsonify({
+            "invoice_id": invoice.id,
+            "pay_url": pay_url,
+            "amount": amount
+        })
+    except Exception as e:
+        return jsonify({"error": f"Ошибка xRocket: {str(e)}"}), 500
 
-async def add_wager_progress(user_id, amount: float):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT wager_required, wager_done, bonus_balance FROM users WHERE user_id = $1", _uid(user_id))
-        if not row: return
-        req, done, bonus = row['wager_required'] or 0.0, row['wager_done'] or 0.0, row['bonus_balance'] or 0.0
-        done += amount
-        if done >= req and req > 0:
-            await db.execute("UPDATE users SET balance = balance + $1, bonus_balance = 0.0, wager_required = 0.0, wager_done = 0.0 WHERE user_id = $2", bonus, _uid(user_id))
-        else:
-            await db.execute("UPDATE users SET wager_done = $1 WHERE user_id = $2", done, _uid(user_id))
+@app.route("/api/check_payment/<invoice_id>")
+def api_check_payment(invoice_id):
+    user_id = get_telegram_user_id()
+    if not user_id: return jsonify({"error": "Unauthorized"}), 401
 
-async def transfer_between_users(from_id, to_id, amount: float) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(from_id))
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(to_id))
-        res = await db.execute("UPDATE users SET balance = balance - $1 WHERE user_id = $2 AND balance >= $1", amount, _uid(from_id))
-        if res != "UPDATE 1": return False
-        await db.execute("UPDATE users SET balance = balance + $1 WHERE user_id = $2", amount, _uid(to_id))
-        return True
+    async def _check():
+        return await rocket.get_invoice(invoice_id)
+
+    try:
+        inv = run_async(_check())
+        if inv.status == "paid":
+            amount = float(inv.price_amount)
+            run_async(update_balance(user_id, amount))
+            run_async(log_tx(user_id, "deposit", amount, f"xrocket_{invoice_id}"))
+            return jsonify({"paid": True, "amount": amount})
+        
+        return jsonify({"paid": False, "status": inv.status})
+    except Exception as e:
+        return jsonify({"paid": False, "error": str(e)}), 500
+
+@app.route("/api/withdraw", methods=["POST"])
+def api_withdraw():
+    user_id = get_telegram_user_id()
+    if not user_id: return jsonify({"error": "Unauthorized"}), 401
+    
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    try:
+        amount = float(data.get("amount", 0))
+    except (ValueError, TypeError):
+        return jsonify({"error": "Неверная сумма"}), 400
+        
+    target_id = data.get("xrocket_id")
+    
+    if amount < 3.0: 
+        return jsonify({"error": "Минимум 3 USDT"}), 400
+    
+    if not target_id:
+        return jsonify({"error": "Укажите ваш xRocket ID"}), 400
+        
+    if not run_async(try_deduct_balance(user_id, amount)):
+        return jsonify({"error": "Недостаточно средств"}), 400
+
+    async def _payout():
+        return await rocket.create_payout(
+            user_id=int(target_id),
+            currency="USDT",
+            amount=amount,
+            description="Withdraw from Bread Casino"
+        )
+
+    try:
+        run_async(_payout())
+        run_async(log_tx(user_id, "withdraw", -amount, f"xrocket_payout_{target_id}"))
+        return jsonify({"ok": True})
+    except Exception as e:
+        run_async(update_balance(user_id, amount))
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8000, debug=False)
