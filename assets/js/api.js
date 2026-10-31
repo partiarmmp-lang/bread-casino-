@@ -1,51 +1,54 @@
-async function apiRequest(endpoint, method = 'GET', body = null) {
-    let url = `${API_URL}${endpoint}`;
-    const headers = {};
-    const options = { method, headers };
-    const userId = getUserId();
+const API_URL = 'https://bread-casino-14.onrender.com';
 
-    if (method === 'GET') {
-        const params = new URLSearchParams(body || {});
-        if (userId) params.append('user_id', userId);
-        if (params.toString()) url += `?${params.toString()}`;
-    } else if (method === 'POST') {
-        if (userId) url += `?user_id=${userId}`;
-        if (body) {
-            options.body = JSON.stringify(body);
-            headers['Content-Type'] = 'application/json';
+function getUserId() {
+    return localStorage.getItem('tg_user_id') || '';
+}
+
+// Простая функция запроса
+async function apiRequest(endpoint, method = 'GET', body = null) {
+    let url = API_URL + endpoint;
+    const userId = getUserId();
+    
+    // Всегда добавляем user_id в URL
+    if (userId) {
+        url += (url.includes('?') ? '&' : '?') + 'user_id=' + userId;
+    }
+
+    // Если передали body, добавляем его в URL для GET
+    if (method === 'GET' && body) {
+        for (const key in body) {
+            url += '&' + key + '=' + encodeURIComponent(body[key]);
         }
     }
 
-    // Показываем, на какой адрес уходит запрос
-    alert("Отправка на: " + url);
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 90000); 
-    options.signal = controller.signal;
+    console.log("Отправка запроса на:", url);
 
     try {
-        const response = await fetch(url, options);
-        clearTimeout(timeoutId);
-        
-        // Если ответ не JSON — показываем статус
-        const contentType = response.headers.get("content-type");
-        if (!contentType || !contentType.includes("application/json")) {
-            const text = await response.text();
-            alert("Сервер ответил не JSON. Статус: " + response.status + ". Текст: " + text.substring(0, 200));
-            throw new Error("Non-JSON response");
-        }
-
+        const response = await fetch(url, { method: method });
         const data = await response.json();
-        if (!response.ok) {
-            alert("Ошибка сервера: " + (data.error || response.status));
-            throw new Error(data.error || 'Ошибка сервера');
-        }
+        if (!response.ok) throw new Error(data.error || 'Ошибка');
         return data;
     } catch (error) {
-        clearTimeout(timeoutId);
-        // Показываем сетевую ошибку (например, Load failed)
-        alert("Сетевая ошибка: " + error.message);
-        console.error('API Error:', error);
+        console.error("Ошибка сети:", error);
+        alert("Ошибка: " + error.message);
         throw error;
+    }
+}
+
+const API = {
+    getBalance: () => apiRequest('/api/balance'),
+    topup: (amount) => apiRequest('/api/topup', 'GET', { amount: amount }),
+    checkPayment: (id) => apiRequest('/api/check_payment/' + id),
+    withdraw: (amount) => apiRequest('/api/withdraw', 'POST', { amount: amount })
+};
+
+async function updateBalanceUI() {
+    const display = document.getElementById('balance-display');
+    if (!display) return;
+    try {
+        const data = await API.getBalance();
+        display.textContent = parseFloat(data.balance).toFixed(2) + ' USDT';
+    } catch (error) {
+        display.textContent = "Ошибка";
     }
 }
