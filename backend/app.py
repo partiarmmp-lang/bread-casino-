@@ -43,7 +43,6 @@ run_async(init_db())
 bot = Bot(token=BOT_TOKEN)
 
 def get_telegram_user_id():
-    # 1. Ищем user_id в URL (для GET-запросов и дублей в POST)
     user_id_arg = request.args.get("user_id")
     if user_id_arg:
         clean_id = re.sub(r'\D', '', str(user_id_arg))
@@ -51,7 +50,6 @@ def get_telegram_user_id():
             try: return int(clean_id)
             except ValueError: pass
 
-    # 2. Ищем в заголовках (на случай если браузер их передал)
     user_id_header = request.headers.get("X-User-ID")
     if user_id_header:
         clean_id = re.sub(r'\D', '', str(user_id_header))
@@ -59,7 +57,6 @@ def get_telegram_user_id():
             try: return int(clean_id)
             except ValueError: pass
             
-    # 3. Проверяем initData (Telegram WebApp)
     init_data = request.headers.get("X-Telegram-Init-Data")
     if init_data:
         try:
@@ -79,9 +76,7 @@ def api_topup():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     
-    # Читаем данные из любого источника
     data = request.get_json(silent=True) or request.args.to_dict() or request.form.to_dict() or {}
-    
     try:
         amount = float(data.get("amount", 1))
     except (ValueError, TypeError):
@@ -91,6 +86,7 @@ def api_topup():
         return jsonify({"error": "Минимум 0.05 USDT"}), 400
 
     async def _create_invoice():
+        # Передаем currency и amount, как в документации
         return await rocket.create_invoice(
             currency="USDT",
             amount=amount,
@@ -102,10 +98,16 @@ def api_topup():
 
     try:
         invoice = run_async(_create_invoice())
-        pay_url = getattr(invoice, 'link', None)
         
+        # Пытаемся найти ссылку во всех возможных полях
+        pay_url = getattr(invoice, 'link', None) or getattr(invoice, 'url', None)
+        
+        # Выводим в консоль Render для отладки
+        print(f"DEBUG: Invoice object: {invoice}")
+        print(f"DEBUG: Pay URL found: {pay_url}")
+
         if not pay_url:
-            return jsonify({"error": "Не удалось получить ссылку"}), 500
+            return jsonify({"error": "Не удалось получить ссылку. Проверьте логи."}), 500
 
         return jsonify({
             "invoice_id": invoice.id,
