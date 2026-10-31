@@ -23,7 +23,6 @@
         .game-title { font-size: 18px; font-weight: 700; }
         #auth-container { display: flex; align-items: center; }
 
-        /* Модальное окно для ввода суммы */
         .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; backdrop-filter: blur(5px); }
         .modal-content { background: #1e1e38; padding: 30px; border-radius: 20px; width: 80%; max-width: 350px; text-align: center; border: 1px solid rgba(255,215,0,0.3); }
         .modal-content h3 { margin-top: 0; color: #ffd700; }
@@ -61,6 +60,10 @@
             <div class="game-icon">🚀</div>
             <div class="game-title">CRASH</div>
         </a>
+        <a href="site.html" class="game-card">
+            <div class="game-icon">🎲</div>
+            <div class="game-title">ВСЕ ИГРЫ</div>
+        </a>
     </div>
 
     <!-- Модальное окно -->
@@ -90,7 +93,6 @@
             updateBalanceUI();
         }
 
-        // --- Логика модального окна ---
         let currentAction = '';
 
         function openModal(type) {
@@ -129,13 +131,19 @@
             
             if (currentAction === 'deposit') {
                 if (amount < 0.05) return alert("Минимум 0.05 USDT");
+                
+                // Открываем пустую вкладку СРАЗУ (пока браузер не заблокировал)
+                const newWindow = window.open('', '_blank');
                 closeModal();
                 
                 API.topup(amount).then(res => {
-                    // Открываем ссылку на оплату
                     if (res.pay_url) {
-                        window.open(res.pay_url, '_blank');
-                        alert("Оплатите счет. После оплаты нажмите ОК.");
+                        if (newWindow) {
+                            newWindow.location.href = res.pay_url;
+                        } else {
+                            window.location.href = res.pay_url;
+                        }
+                        
                         setTimeout(() => {
                             API.checkPayment(res.invoice_id).then(check => {
                                 if (check.paid) { alert("Баланс пополнен!"); updateBalanceUI(); }
@@ -143,7 +151,10 @@
                             });
                         }, 5000);
                     }
-                }).catch(e => alert("Ошибка сети: " + e.message));
+                }).catch(e => {
+                    if (newWindow) newWindow.close();
+                    alert("Ошибка: " + e.message);
+                });
                 
             } else if (currentAction === 'withdraw') {
                 if (amount < 3) return alert("Минимум 3 USDT");
