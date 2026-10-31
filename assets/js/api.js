@@ -5,13 +5,22 @@ function getUserId() {
 }
 
 async function apiRequest(endpoint, method = 'GET', body = null) {
-    // ВОЗВРАЩАЕМ Content-Type, иначе сервер вернет 415
+    // Убираем Content-Type: application/json, чтобы Safari не делал OPTIONS
     const headers = {
-        'Content-Type': 'application/json',
         'X-User-ID': getUserId()
     };
     const options = { method, headers };
-    if (body) options.body = JSON.stringify(body);
+
+    if (body) {
+        // Отправляем как форму, а не как JSON
+        const formData = new URLSearchParams();
+        for (const key in body) {
+            formData.append(key, body[key]);
+        }
+        options.body = formData;
+        // Этот Content-Type не требует проверки OPTIONS
+        headers['Content-Type'] = 'application/x-www-form-urlencoded';
+    }
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 90000); 
@@ -21,7 +30,6 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
         const response = await fetch(`${API_URL}${endpoint}`, options);
         clearTimeout(timeoutId);
         
-        // Проверка, что сервер вернул JSON (защита от HTML-ошибок)
         const contentType = response.headers.get("content-type");
         if (!contentType || !contentType.includes("application/json")) {
             throw new Error(`Сервер вернул ошибку ${response.status}. Проверьте логи Render.`);
