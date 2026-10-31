@@ -43,16 +43,13 @@ run_async(init_db())
 bot = Bot(token=BOT_TOKEN)
 
 def get_telegram_user_id():
-    # 1. Проверяем заголовок X-User-ID (приходит с сайта)
     user_id_header = request.headers.get("X-User-ID")
     if user_id_header:
-        # Убираем всё, кроме цифр (на случай пробелов или скрытых символов)
         clean_id = re.sub(r'\D', '', str(user_id_header))
         if clean_id:
             try: return int(clean_id)
             except ValueError: pass
             
-    # 2. Проверяем initData (если открыто в Telegram)
     init_data = request.headers.get("X-Telegram-Init-Data")
     if init_data:
         try:
@@ -82,23 +79,21 @@ def api_topup():
         return jsonify({"error": "Минимум 0.05 USDT"}), 400
 
     async def _create_invoice():
-        # Создаем счет с правильными типами данных
         return await rocket.create_invoice(
             currency="USDT",
             amount=amount,
+            min_payment=0,
+            num_payments=1,
             description=f"Bread Casino ID: {user_id}",
-            hidden_message="Спасибо за пополнение!",
-            num_payments=1
+            hidden_message="Спасибо за пополнение!"
         )
 
     try:
         invoice = run_async(_create_invoice())
-        
-        # В библиотеке aiorocket2 ссылка на оплату находится в поле link
         pay_url = getattr(invoice, 'link', None)
         
         if not pay_url:
-            return jsonify({"error": "Не удалось получить ссылку на оплату"}), 500
+            return jsonify({"error": "Не удалось получить ссылку"}), 500
 
         return jsonify({
             "invoice_id": invoice.id,
@@ -164,7 +159,6 @@ def api_withdraw():
         run_async(log_tx(user_id, "withdraw", -amount, f"xrocket_payout_{target_id}"))
         return jsonify({"ok": True})
     except Exception as e:
-        # Возвращаем деньги, если выплата не прошла
         run_async(update_balance(user_id, amount))
         return jsonify({"error": str(e)}), 500
 
