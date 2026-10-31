@@ -43,6 +43,15 @@ run_async(init_db())
 bot = Bot(token=BOT_TOKEN)
 
 def get_telegram_user_id():
+    # 1. Ищем user_id в URL (для GET-запросов и дублей в POST)
+    user_id_arg = request.args.get("user_id")
+    if user_id_arg:
+        clean_id = re.sub(r'\D', '', str(user_id_arg))
+        if clean_id:
+            try: return int(clean_id)
+            except ValueError: pass
+
+    # 2. Ищем в заголовках (на случай если браузер их передал)
     user_id_header = request.headers.get("X-User-ID")
     if user_id_header:
         clean_id = re.sub(r'\D', '', str(user_id_header))
@@ -50,6 +59,7 @@ def get_telegram_user_id():
             try: return int(clean_id)
             except ValueError: pass
             
+    # 3. Проверяем initData (Telegram WebApp)
     init_data = request.headers.get("X-Telegram-Init-Data")
     if init_data:
         try:
@@ -64,13 +74,12 @@ def api_balance():
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     return jsonify({"balance": run_async(get_total_balance(user_id))})
 
-# Разрешаем POST и GET для обхода Safari
-@app.route("/api/topup", methods=["POST", "GET"])
+@app.route("/api/topup", methods=["GET", "POST"])
 def api_topup():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     
-    # Читаем JSON, GET-параметры или форму
+    # Читаем данные из любого источника
     data = request.get_json(silent=True) or request.args.to_dict() or request.form.to_dict() or {}
     
     try:
