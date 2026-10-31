@@ -5,16 +5,16 @@ function getUserId() {
 }
 
 async function apiRequest(endpoint, method = 'GET', body = null) {
+    // Убираем Content-Type, чтобы Safari не делал OPTIONS-запрос
     const headers = {
-        'Content-Type': 'application/json',
         'X-User-ID': getUserId()
     };
     const options = { method, headers };
     if (body) options.body = JSON.stringify(body);
 
-    // Увеличиваем время ожидания до 60 секунд, чтобы сервер успел проснуться
+    // Увеличиваем тайм-аут до 90 секунд (сервер может долго просыпаться)
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 60000); 
+    const timeoutId = setTimeout(() => controller.abort(), 90000); 
     options.signal = controller.signal;
 
     try {
