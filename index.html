@@ -5,23 +5,40 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Bread Casino</title>
     <style>
-        body { margin: 0; font-family: sans-serif; background: linear-gradient(135deg, #1a1a2e, #16213e); color: white; min-height: 100vh; }
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: rgba(0,0,0,0.3); }
-        .logo { font-size: 24px; font-weight: bold; color: #ffd700; }
-        .balance-box { background: rgba(255,215,0,0.1); border: 1px solid #ffd700; padding: 8px 15px; border-radius: 20px; font-weight: bold; }
-        .action-buttons { display: flex; gap: 10px; justify-content: center; padding: 15px; }
-        .btn { padding: 8px 15px; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; }
-        .btn-deposit { background: #00c853; color: white; }
-        .btn-withdraw { background: #d32f2f; color: white; }
-        .games-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; padding: 20px; max-width: 600px; margin: 0 auto; }
-        .game-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 15px; padding: 20px; text-align: center; cursor: pointer; text-decoration: none; color: white; display: flex; flex-direction: column; align-items: center; }
-        .game-icon { font-size: 40px; margin-bottom: 10px; }
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700;900&display=swap');
+        body { margin: 0; font-family: 'Montserrat', sans-serif; background: radial-gradient(circle at top, #1e1e38, #0a0a14); color: white; min-height: 100vh; }
+        .header { display: flex; justify-content: space-between; align-items: center; padding: 20px; background: rgba(0,0,0,0.4); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100; border-bottom: 1px solid rgba(255,215,0,0.2); }
+        .logo { font-size: 22px; font-weight: 900; color: #ffd700; text-shadow: 0 0 15px rgba(255,215,0,0.6); letter-spacing: 1px; }
+        .balance-box { background: rgba(255,215,0,0.1); border: 1px solid #ffd700; padding: 8px 15px; border-radius: 20px; font-weight: bold; box-shadow: 0 0 10px rgba(255,215,0,0.2); }
+        .action-buttons { display: flex; gap: 15px; justify-content: center; padding: 20px; }
+        .btn { padding: 12px 25px; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; font-family: 'Montserrat', sans-serif; }
+        .btn:active { transform: scale(0.95); }
+        .btn-deposit { background: linear-gradient(135deg, #00c853, #009624); color: white; box-shadow: 0 4px 15px rgba(0,200,83,0.4); }
+        .btn-withdraw { background: linear-gradient(135deg, #d32f2f, #9a0007); color: white; box-shadow: 0 4px 15px rgba(211,47,47,0.4); }
+        
+        .games-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; padding: 20px; max-width: 600px; margin: 0 auto; }
+        .game-card { 
+            background: linear-gradient(145deg, rgba(255,255,255,0.05), rgba(255,255,255,0.01)); 
+            border: 1px solid rgba(255,255,255,0.1); 
+            border-radius: 20px; padding: 30px 20px; text-align: center; cursor: pointer; 
+            text-decoration: none; color: white; display: flex; flex-direction: column; align-items: center;
+            transition: 0.3s; position: relative; overflow: hidden;
+        }
+        .game-card::before {
+            content: ''; position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(45deg, transparent, rgba(255,215,0,0.1), transparent);
+            transform: translateX(-100%); transition: 0.5s;
+        }
+        .game-card:hover::before { transform: translateX(100%); }
+        .game-card:hover { border-color: #ffd700; box-shadow: 0 10px 25px rgba(255,215,0,0.2); }
+        .game-icon { font-size: 50px; margin-bottom: 15px; filter: drop-shadow(0 0 10px rgba(255,255,255,0.3)); }
+        .game-title { font-size: 18px; font-weight: 700; }
         #auth-container { display: flex; align-items: center; }
     </style>
 </head>
 <body>
     <div class="header">
-        <div class="logo">🍞 BREAD</div>
+        <div class="logo">🍞 BREAD CASINO</div>
         <div id="auth-container">
             <script async src="https://telegram.org/js/telegram-widget.js?22" data-telegram-login="Poblatoh_bot" data-size="medium" data-radius="10" data-auth-url="https://partiarmmp-lang.github.io/bread-casino-/" data-request-access="write"></script>
         </div>
@@ -38,25 +55,24 @@
     <div class="games-grid">
         <a href="plinko.html" class="game-card">
             <div class="game-icon">🎰</div>
-            <div class="game-title">Plinko</div>
+            <div class="game-title">PLINKO</div>
         </a>
         <a href="slots.html" class="game-card">
             <div class="game-icon">🍒</div>
-            <div class="game-title">Слоты</div>
+            <div class="game-title">СЛОТЫ</div>
         </a>
         <a href="crash.html" class="game-card">
             <div class="game-icon">🚀</div>
-            <div class="game-title">Crash</div>
+            <div class="game-title">CRASH</div>
         </a>
         <a href="site.html" class="game-card">
             <div class="game-icon">🎲</div>
-            <div class="game-title">Все игры</div>
+            <div class="game-title">ВСЕ ИГРЫ</div>
         </a>
     </div>
 
     <script src="assets/js/api.js"></script>
     <script>
-        // Проверка авторизации при загрузке
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has('id') && urlParams.has('hash')) {
             localStorage.setItem('tg_user_id', urlParams.get('id'));
@@ -72,44 +88,32 @@
             updateBalanceUI();
         }
 
-        // Пополнение
         function showTopup() {
             if (!localStorage.getItem('tg_user_id')) return alert("Пожалуйста, войдите через Telegram!");
-            
             let amount = prompt("Введите сумму пополнения в USDT (мин. 0.05):", "1");
             if (amount && !isNaN(amount)) {
                 amount = parseFloat(amount);
                 if (amount < 0.05) return alert("Минимальная сумма 0.05 USDT");
 
                 API.topup(amount).then(res => {
-                    // Открываем ссылку на оплату в CryptoBot
                     window.open(res.pay_url, '_blank');
                     alert("Оплатите счет в открывшемся окне. После оплаты нажмите ОК.");
-                    
-                    // Проверяем оплату через 5 секунд
                     setTimeout(() => {
                         API.checkPayment(res.invoice_id).then(check => {
-                            if (check.paid) { 
-                                alert("Баланс успешно пополнен!"); 
-                                updateBalanceUI(); 
-                            } else {
-                                alert("Оплата еще не поступила. Если вы оплатили, подождите пару минут и обновите страницу.");
-                            }
+                            if (check.paid) { alert("Баланс успешно пополнен!"); updateBalanceUI(); }
+                            else { alert("Оплата еще не поступила. Подождите пару минут."); }
                         });
                     }, 5000);
-                }).catch(e => alert("Ошибка при создании счета: " + e.message));
+                }).catch(e => alert("Ошибка: " + e.message));
             }
         }
 
-        // Вывод
         function showWithdraw() {
             if (!localStorage.getItem('tg_user_id')) return alert("Пожалуйста, войдите через Telegram!");
-            
             let amount = prompt("Введите сумму вывода в USDT (минимум 3 USDT):", "3");
             if (amount && !isNaN(amount)) {
                 amount = parseFloat(amount);
                 if (amount < 3.0) return alert("Минимальная сумма для вывода — 3 USDT");
-
                 API.withdraw(amount).then(res => {
                     alert("Вывод успешно выполнен! Проверьте ваш CryptoBot.");
                     updateBalanceUI();
