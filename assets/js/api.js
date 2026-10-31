@@ -1,12 +1,9 @@
-// Ссылка на твой сервер Render
 const API_URL = 'https://bread-casino-14.onrender.com';
 
-// Получаем ID из localStorage (сохраняется после входа через Telegram)
 function getUserId() {
     return localStorage.getItem('tg_user_id') || '';
 }
 
-// Универсальная функция запроса
 async function apiRequest(endpoint, method = 'GET', body = null) {
     const headers = {
         'Content-Type': 'application/json',
@@ -30,8 +27,7 @@ const API = {
     getBalance: () => apiRequest('/api/balance'),
     topup: (amount) => apiRequest('/api/topup', 'POST', { amount }),
     checkPayment: (id) => apiRequest(`/api/check_payment/${id}`),
-    withdraw: (amount) => apiRequest('/api/withdraw', 'POST', { amount }),
-    playPlinko: (amount) => apiRequest('/api/plinko', 'POST', { amount })
+    withdraw: (amount) => apiRequest('/api/withdraw', 'POST', { amount })
 };
 
 async function updateBalanceUI() {
