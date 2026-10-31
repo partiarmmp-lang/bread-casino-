@@ -64,13 +64,15 @@ def api_balance():
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     return jsonify({"balance": run_async(get_total_balance(user_id))})
 
-@app.route("/api/topup", methods=["POST"])
+# Разрешаем POST и GET для обхода Safari
+@app.route("/api/topup", methods=["POST", "GET"])
 def api_topup():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     
-    # Читаем и JSON, и данные из формы
-    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    # Читаем JSON, GET-параметры или форму
+    data = request.get_json(silent=True) or request.args.to_dict() or request.form.to_dict() or {}
+    
     try:
         amount = float(data.get("amount", 1))
     except (ValueError, TypeError):
@@ -130,7 +132,6 @@ def api_withdraw():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     
-    # Читаем и JSON, и данные из формы
     data = request.get_json(silent=True) or request.form.to_dict() or {}
     try:
         amount = float(data.get("amount", 0))
@@ -161,7 +162,6 @@ def api_withdraw():
         run_async(log_tx(user_id, "withdraw", -amount, f"xrocket_payout_{target_id}"))
         return jsonify({"ok": True})
     except Exception as e:
-        # Возвращаем деньги, если выплата не прошла
         run_async(update_balance(user_id, amount))
         return jsonify({"error": str(e)}), 500
 
