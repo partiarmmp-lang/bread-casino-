@@ -1,5 +1,4 @@
 import asyncio
-import random
 import os
 import threading
 import time
@@ -8,15 +7,16 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from aiogram.utils.web_app import safe_parse_webapp_init_data
 from aiogram import Bot
-from database import init_db, get_balance, update_balance, get_total_balance, try_deduct_balance, log_tx
+from database import init_db, get_total_balance, update_balance, try_deduct_balance, log_tx
 
-# ИСПРАВЛЕНО: правильное имя класса
+# Импортируем правильный класс из библиотеки
 from aiorocket2 import xRocketClient
 
 load_dotenv()
 XROCKET_TOKEN = os.getenv("XROCKET_TOKEN")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
+# --- 1. Постоянный event loop ---
 _loop = asyncio.new_event_loop()
 asyncio.set_event_loop(_loop)
 
@@ -30,7 +30,7 @@ def run_async(coro):
     future = asyncio.run_coroutine_threadsafe(coro, _loop)
     return future.result()
 
-# ИСПРАВЛЕНО: создаем клиент xRocketClient
+# --- 2. Инициализация клиента xRocket ---
 rocket = None
 
 async def _init_rocket():
@@ -39,6 +39,7 @@ async def _init_rocket():
 
 run_async(_init_rocket())
 
+# --- 3. Flask ---
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 run_async(init_db())
@@ -57,6 +58,8 @@ def get_telegram_user_id():
         except Exception: pass
     return None
 
+# --- 4. Эндпоинты ---
+
 @app.route("/api/balance")
 def api_balance():
     user_id = get_telegram_user_id()
@@ -74,18 +77,20 @@ def api_topup():
         return jsonify({"error": "Минимум 0.05 USDT"}), 400
 
     async def _create_invoice():
-        # ИСПРАВЛЕНО: параметры под xRocketClient
+        # Создаем счет с правильными параметрами для aiorocket2
         return await rocket.create_invoice(
-            amount=amount,
             currency="USDT",
+            amount=amount,
             description=f"Bread Casino ID: {user_id}",
+            hidden_message="Спасибо за пополнение!",
             num_payments=1,
             min_payment=0
         )
 
     try:
         invoice = run_async(_create_invoice())
-        # ИСПРАВЛЕНО: ссылка на оплату находится в поле invoice.link
+        
+        # В библиотеке aiorocket2 ссылка на оплату находится в поле invoice.link
         pay_url = invoice.link
         
         if not pay_url:
@@ -110,6 +115,7 @@ def api_check_payment(invoice_id):
 
     try:
         inv = run_async(_check())
+        # Статус "paid" означает успешную оплату [citation:2]
         if inv.status == "paid":
             amount = float(inv.price_amount)
             run_async(update_balance(user_id, amount))
@@ -138,12 +144,12 @@ def api_withdraw():
         return jsonify({"error": "Недостаточно средств"}), 400
 
     async def _payout():
-        # ИСПРАВЛЕНО: для вывода на внутренний ID xRocket
+        # Выплата на внутренний ID xRocket
         return await rocket.create_payout(
             user_id=int(target_id),
             currency="USDT",
             amount=amount,
-            description=f"Withdraw from Bread Casino"
+            description="Withdraw from Bread Casino"
         )
 
     try:
@@ -151,6 +157,7 @@ def api_withdraw():
         run_async(log_tx(user_id, "withdraw", -amount, f"xrocket_payout_{target_id}"))
         return jsonify({"ok": True})
     except Exception as e:
+        # Возвращаем деньги, если выплата не прошла
         run_async(update_balance(user_id, amount))
         return jsonify({"error": str(e)}), 500
 
