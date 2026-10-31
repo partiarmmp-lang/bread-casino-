@@ -28,18 +28,27 @@
         }
         .logo { font-size: 24px; font-weight: bold; color: #ffd700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
         
-        /* Стиль для кнопки баланса/входа */
+        /* Стиль для кнопки входа (ссылка) */
+        .auth-link {
+            text-decoration: none;
+            background: rgba(255, 215, 0, 0.1);
+            border: 1px solid #ffd700;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-weight: bold;
+            color: white;
+            display: inline-block;
+            transition: 0.2s;
+        }
+        .auth-link:hover { background: rgba(255, 215, 0, 0.2); }
+
         .balance-box {
             background: rgba(255, 215, 0, 0.1);
             border: 1px solid #ffd700;
             padding: 8px 15px;
             border-radius: 20px;
             font-weight: bold;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-        .balance-box:hover {
-            background: rgba(255, 215, 0, 0.2);
+            display: none; /* Изначально скрыт, показываем если зашли из бота */
         }
 
         .action-buttons { display: flex; gap: 10px; }
@@ -64,12 +73,10 @@
 
     <div class="header">
         <div class="logo">🍞 BREAD CASINO</div>
-        <!-- Кнопка Войти / Баланс -->
-        <div id="auth-container">
-            <div class="balance-box" id="auth-btn" onclick="loginViaBot()">
-                💰 <span id="balance-display">Войдите</span>
-            </div>
-        </div>
+        
+        <!-- Если не авторизован: показываем ссылку. Если авторизован: показываем баланс -->
+        <a href="https://t.me/Poblatoh_bot?start=site_login" class="auth-link" id="login-btn">💰 Войдите</a>
+        <div class="balance-box" id="balance-box">💰 <span id="balance-display">0.00</span> USDT</div>
     </div>
 
     <div class="action-buttons" style="padding: 15px; justify-content: center;">
@@ -97,40 +104,38 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        // Функция входа через бота (открывает бота и передает метку)
-        function loginViaBot() {
-            // Если мы уже в Telegram (Mini App), кнопка не нужна
-            if (tg.initData) return;
-            
-            // Если мы в браузере, перекидываем в бота
-            window.location.href = "https://t.me/Poblatoh_bot?start=site_login";
-        }
-
-        // Инициализация при загрузке
         window.addEventListener('load', () => {
-            // Если зашли из бота (есть initData)
+            // Если открыли внутри Telegram (Mini App)
             if (tg.initData) {
-                // Сохраняем данные
                 localStorage.setItem('tg_init_data', tg.initData);
-                // Меняем кнопку на баланс
-                document.getElementById('auth-btn').onclick = null;
-                document.getElementById('auth-btn').style.cursor = 'default';
-                // Запрашиваем баланс
-                updateBalanceUI();
-            } else if (localStorage.getItem('tg_init_data')) {
-                // Если уже входили ранее (сохранено в браузере)
-                document.getElementById('auth-btn').onclick = null;
-                document.getElementById('auth-btn').style.cursor = 'default';
-                updateBalanceUI();
-            } else {
-                // Если зашли в браузере и не авторизованы
-                document.getElementById('balance-display').textContent = "Войдите";
+                
+                // Прячем кнопку "Войдите", показываем баланс
+                document.getElementById('login-btn').style.display = 'none';
+                document.getElementById('balance-box').style.display = 'inline-block';
+                
+                // Загружаем баланс
+                updateBalance();
+            } 
+            // Если открыли в браузере, но уже входили ранее
+            else if (localStorage.getItem('tg_init_data')) {
+                document.getElementById('login-btn').style.display = 'none';
+                document.getElementById('balance-box').style.display = 'inline-block';
+                updateBalance();
             }
+            // Если открыли в браузере без авторизации - кнопка "Войдите" видна (это обычная ссылка)
         });
 
-        // Вспомогательные функции для кнопок
+        async function updateBalance() {
+            try {
+                const data = await API.getBalance();
+                document.getElementById('balance-display').textContent = parseFloat(data.balance).toFixed(2);
+            } catch (error) {
+                document.getElementById('balance-display').textContent = "Ошибка";
+            }
+        }
+
         function showTopup() {
-            if (!getInitData()) return alert("Сначала нажмите 'Войдите' и авторизуйтесь в Telegram!");
+            if (!localStorage.getItem('tg_init_data') && !tg.initData) return alert("Сначала нажмите 'Войдите'!");
             let amount = prompt("Введите сумму пополнения в USDT:", "1");
             if (amount) {
                 API.topup(parseFloat(amount)).then(res => {
@@ -138,7 +143,7 @@
                     alert("Оплатите счет в открывшемся окне. После оплаты нажмите ОК.");
                     setTimeout(() => {
                         API.checkPayment(res.invoice_id).then(check => {
-                            if (check.paid) { alert("Баланс пополнен!"); updateBalanceUI(); }
+                            if (check.paid) { alert("Баланс пополнен!"); updateBalance(); }
                         });
                     }, 5000);
                 }).catch(e => alert(e.message));
@@ -146,27 +151,12 @@
         }
 
         function showWithdraw() {
-            if (!getInitData()) return alert("Сначала нажмите 'Войдите' и авторизуйтесь в Telegram!");
+            if (!localStorage.getItem('tg_init_data') && !tg.initData) return alert("Сначала нажмите 'Войдите'!");
             let amount = prompt("Введите сумму вывода (мин. 3 USDT):", "3");
             if (amount) {
                 API.withdraw(parseFloat(amount)).then(res => {
-                    alert("Вывод успешен! Проверьте CryptoBot."); updateBalanceUI();
+                    alert("Вывод успешен! Проверьте CryptoBot."); updateBalance();
                 }).catch(e => alert(e.message));
-            }
-        }
-
-        // Переопределяем функцию обновления баланса, чтобы она меняла именно наш элемент
-        async function updateBalanceUI() {
-            const display = document.getElementById('balance-display');
-            try {
-                const data = await API.getBalance();
-                display.textContent = parseFloat(data.balance).toFixed(2) + ' USDT';
-                // Убираем кнопку "Войти", если баланс загрузился
-                document.getElementById('auth-btn').onclick = null;
-                document.getElementById('auth-btn').style.borderColor = "#00c853"; // Зеленая рамка при успехе
-            } catch (error) {
-                console.error('Ошибка баланса:', error);
-                display.textContent = 'Ошибка';
             }
         }
     </script>
