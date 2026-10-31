@@ -5,15 +5,17 @@ function getUserId() {
 }
 
 async function apiRequest(endpoint, method = 'GET', body = null) {
-    // Если это GET, добавляем параметры в URL
     let url = `${API_URL}${endpoint}`;
     const headers = { 'X-User-ID': getUserId() };
     const options = { method, headers };
 
+    // Для GET-запросов параметры добавляем в URL
     if (method === 'GET' && body) {
         const params = new URLSearchParams(body).toString();
         url += `?${params}`;
-    } else if (body) {
+    } 
+    // Для POST-запросов отправляем JSON
+    else if (body) {
         options.body = JSON.stringify(body);
         headers['Content-Type'] = 'application/json';
     }
@@ -37,7 +39,7 @@ async function apiRequest(endpoint, method = 'GET', body = null) {
 
 const API = {
     getBalance: () => apiRequest('/api/balance'),
-    // Меняем метод на GET для пополнения
+    // Используем GET для пополнения, чтобы обойти Safari
     topup: (amount) => apiRequest('/api/topup', 'GET', { amount }),
     checkPayment: (id) => apiRequest(`/api/check_payment/${id}`),
     withdraw: (amount) => apiRequest('/api/withdraw', 'POST', { amount })
