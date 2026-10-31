@@ -11,17 +11,15 @@
         .logo { font-size: 22px; font-weight: 900; color: #ffd700; text-shadow: 0 0 15px rgba(255,215,0,0.6); }
         .balance-box { background: rgba(255,215,0,0.1); border: 1px solid #ffd700; padding: 8px 15px; border-radius: 20px; font-weight: bold; }
         .action-buttons { display: flex; gap: 15px; justify-content: center; padding: 20px; }
-        .btn { padding: 12px 25px; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; transition: 0.2s; }
+        .btn { padding: 12px 25px; border: none; border-radius: 12px; font-weight: bold; font-size: 16px; cursor: pointer; }
         .btn-deposit { background: #00c853; color: white; }
         .btn-withdraw { background: #d32f2f; color: white; }
-        
         .games-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; padding: 20px; max-width: 600px; margin: 0 auto; }
         .game-card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 30px 20px; text-align: center; text-decoration: none; color: white; display: flex; flex-direction: column; align-items: center; }
         .game-icon { font-size: 50px; margin-bottom: 15px; }
         .game-title { font-size: 18px; font-weight: 700; }
         #auth-container { display: flex; align-items: center; }
-
-        /* Простое модальное окно */
+        
         #modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 1000; justify-content: center; align-items: center; }
         .modal-content { background: #1e1e38; padding: 30px; border-radius: 20px; width: 80%; max-width: 300px; text-align: center; }
         input { width: 100%; padding: 15px; margin: 15px 0; border-radius: 10px; border: none; background: #0a0a14; color: white; font-size: 18px; text-align: center; box-sizing: border-box; }
@@ -45,21 +43,11 @@
     </div>
 
     <div class="games-grid">
-        <a href="plinko.html" class="game-card">
-            <div class="game-icon">🎰</div>
-            <div class="game-title">PLINKO</div>
-        </a>
-        <a href="slots.html" class="game-card">
-            <div class="game-icon">🍒</div>
-            <div class="game-title">СЛОТЫ</div>
-        </a>
-        <a href="crash.html" class="game-card">
-            <div class="game-icon">🚀</div>
-            <div class="game-title">CRASH</div>
-        </a>
+        <a href="plinko.html" class="game-card"><div class="game-icon">🎰</div><div class="game-title">PLINKO</div></a>
+        <a href="slots.html" class="game-card"><div class="game-icon">🍒</div><div class="game-title">СЛОТЫ</div></a>
+        <a href="crash.html" class="game-card"><div class="game-icon">🚀</div><div class="game-title">CRASH</div></a>
     </div>
 
-    <!-- Модальное окно -->
     <div id="modal">
         <div class="modal-content">
             <h3 id="modal-title">Пополнение</h3>
@@ -69,9 +57,57 @@
         </div>
     </div>
 
-    <script src="assets/js/api.js"></script>
     <script>
-        // Проверка входа
+        // --- ВСТРОЕННЫЙ API (без api.js) ---
+        const API_URL = 'https://bread-casino-14.onrender.com';
+
+        function getUserId() {
+            return localStorage.getItem('tg_user_id') || '';
+        }
+
+        async function apiRequest(endpoint, method = 'GET', body = null) {
+            let url = API_URL + endpoint;
+            const userId = getUserId();
+            
+            if (userId) {
+                url += (url.includes('?') ? '&' : '?') + 'user_id=' + userId;
+            }
+
+            if (method === 'GET' && body) {
+                for (const key in body) {
+                    url += '&' + key + '=' + encodeURIComponent(body[key]);
+                }
+            }
+
+            try {
+                const response = await fetch(url, { method: method });
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Ошибка');
+                return data;
+            } catch (error) {
+                alert("Ошибка сети: " + error.message);
+                throw error;
+            }
+        }
+
+        const API = {
+            getBalance: () => apiRequest('/api/balance'),
+            topup: (amount) => apiRequest('/api/topup', 'GET', { amount: amount }),
+            withdraw: (amount) => apiRequest('/api/withdraw', 'POST', { amount: amount })
+        };
+
+        async function updateBalanceUI() {
+            const display = document.getElementById('balance-display');
+            if (!display) return;
+            try {
+                const data = await API.getBalance();
+                display.textContent = parseFloat(data.balance).toFixed(2) + ' USDT';
+            } catch (error) {
+                display.textContent = "Ошибка";
+            }
+        }
+
+        // --- ЛОГИКА ИНТЕРФЕЙСА ---
         const urlParams = new URLSearchParams(window.location.search);
         if (urlParams.has('id') && urlParams.has('hash')) {
             localStorage.setItem('tg_user_id', urlParams.get('id'));
