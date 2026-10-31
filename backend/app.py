@@ -15,32 +15,26 @@ load_dotenv()
 CRYPTO_TOKEN = os.getenv("CRYPTO_TOKEN")
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 
-# --- 1. Один постоянный event loop на процесс ---
 _loop = asyncio.new_event_loop()
 asyncio.set_event_loop(_loop)
-
 def _start_loop(loop):
     asyncio.set_event_loop(loop)
     loop.run_forever()
-
 threading.Thread(target=_start_loop, args=(_loop,), daemon=True).start()
 
 def run_async(coro):
     future = asyncio.run_coroutine_threadsafe(coro, _loop)
     return future.result()
 
-# --- 2. Инициализация CryptoBot ---
 crypto = None
 async def _init_crypto():
     global crypto
     crypto = AioCryptoPay(token=CRYPTO_TOKEN, network=Networks.MAIN_NET)
 run_async(_init_crypto())
 
-# --- 3. Flask + CORS ---
 app = Flask(__name__)
 CORS(app, resources={r"/api/*": {"origins": "*"}})
 run_async(init_db())
-
 bot = Bot(token=BOT_TOKEN)
 
 def get_telegram_user_id():
@@ -56,14 +50,11 @@ def get_telegram_user_id():
         except Exception: pass
     return None
 
-# --- 4. Эндпоинты ---
-
 @app.route("/api/balance")
 def api_balance():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
-    balance = run_async(get_total_balance(user_id))
-    return jsonify({"balance": balance})
+    return jsonify({"balance": run_async(get_total_balance(user_id))})
 
 @app.route("/api/spin", methods=["POST"])
 def api_spin():
@@ -73,9 +64,8 @@ def api_spin():
     amount = float(data.get("amount", 1))
     if not run_async(try_deduct_balance(user_id, amount)):
         return jsonify({"error": "Недостаточно средств"}), 400
-    win = random.choice([True, False]) # Упрощенная логика для теста
-    if win:
-        run_async(update_balance(user_id, amount * 2))
+    win = random.choice([True, False])
+    if win: run_async(update_balance(user_id, amount * 2))
     return jsonify({"win": win, "balance": run_async(get_total_balance(user_id))})
 
 @app.route("/api/plinko", methods=["POST"])
@@ -84,23 +74,18 @@ def api_plinko():
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     data = request.get_json() or {}
     amount = float(data.get("amount", 1))
-    
     if not run_async(try_deduct_balance(user_id, amount)):
         return jsonify({"error": "Недостаточно средств"}), 400
-
-    # Логика Плинко: случайный множитель из массива
-    multipliers = [10, 3, 1.5, 1, 0.5, 0.2, 0.2, 0.5, 1, 1.5, 3, 10]
-    mult = random.choice(multipliers)
-    win_amount = amount * mult
     
+    # Логика: чем ближе к краю, тем больше множитель
+    multipliers = [10, 3, 1.5, 1, 0.5, 0.2, 0.2, 0.5, 1, 1.5, 3, 10]
+    index = random.choices(range(12), weights=[1, 2, 4, 10, 20, 26, 26, 20, 10, 4, 2, 1])[0]
+    mult = multipliers[index]
+    win_amount = amount * mult
     if win_amount > 0:
         run_async(update_balance(user_id, win_amount))
     
-    return jsonify({
-        "multiplier": mult,
-        "win_amount": win_amount,
-        "balance": run_async(get_total_balance(user_id))
-    })
+    return jsonify({"multiplier": mult, "win_amount": win_amount, "balance": run_async(get_total_balance(user_id))})
 
 @app.route("/api/topup", methods=["POST"])
 def api_topup():
