@@ -10,7 +10,6 @@
         .header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: rgba(0,0,0,0.6); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100; border-bottom: 1px solid rgba(255,215,0,0.2); }
         .logo { font-size: 20px; font-weight: 900; color: #ffd700; text-shadow: 0 0 15px rgba(255,215,0,0.6); }
         
-        /* Контейнер для виджета входа */
         #auth-container { display: flex; align-items: center; }
         
         .balance-box { text-align: right; background: rgba(255,215,0,0.1); border: 1px solid #ffd700; padding: 5px 15px; border-radius: 15px; display: none; }
@@ -49,7 +48,6 @@
     <div class="header">
         <div class="logo">🍞 BREAD</div>
         
-        <!-- ВИДЖЕТ ВХОДА ЧЕРЕЗ TELEGRAM -->
         <div id="auth-container">
             <script async src="https://telegram.org/js/telegram-widget.js?22" 
                     data-telegram-login="Poblatoh_bot" 
@@ -77,6 +75,8 @@
         <a href="mines.html" class="game-card"><div class="game-icon">💣</div><div class="game-title">МИНЫ</div></a>
         <a href="lottery.html" class="game-card"><div class="game-icon">🎟️</div><div class="game-title">ЛОТЕРЕЯ</div></a>
         <a href="clicker.html" class="game-card"><div class="game-icon">🪙</div><div class="game-title">КЛИКЕР</div></a>
+        <!-- Добавили Колесо Фортуны -->
+        <a href="wheel.html" class="game-card"><div class="game-icon">🎡</div><div class="game-title">КОЛЕСО</div></a>
     </div>
 
     <div class="bottom-nav">
@@ -146,12 +146,10 @@
             let userId = getUserId();
             const urlParams = new URLSearchParams(window.location.search);
             
-            // 1. Если пришли из Telegram WebApp
             if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
                 userId = window.Telegram.WebApp.initDataUnsafe.user.id;
                 localStorage.setItem('tg_user_id', userId);
             }
-            // 2. Если пришли по ссылке от виджета входа (там есть ?id=...)
             else if (urlParams.has('id')) {
                 localStorage.setItem('tg_user_id', urlParams.get('id'));
                 userId = urlParams.get('id');
@@ -159,7 +157,6 @@
             }
             
             if (userId) {
-                // Скрываем виджет, показываем баланс
                 document.getElementById('auth-container').style.display = 'none';
                 document.getElementById('balance-box').style.display = 'block';
                 
@@ -205,17 +202,32 @@
             closeModal();
 
             if (actionType === 'deposit') {
-                const newWindow = window.open('about:blank', '_blank');
-                if (newWindow) newWindow.document.write('<h3 style="font-family:sans-serif;padding:40px;text-align:center;color:#000;">Создаем счет...</h3>');
+                // Проверяем, открыты ли мы внутри Telegram (WebApp)
+                const isTelegram = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData;
+                
+                let newWindow = null;
+                if (!isTelegram) {
+                    newWindow = window.open('about:blank', '_blank');
+                    if (newWindow) newWindow.document.write('<h3 style="font-family:sans-serif;padding:40px;text-align:center;color:#000;">Создаем счет...</h3>');
+                }
+                
                 showLoader();
+
                 try {
                     const res = await apiRequest('/api/topup', 'GET', { amount: amount });
                     if (res.pay_url) {
                         hideLoader();
                         currentInvoiceId = res.invoice_id;
-                        if (newWindow) newWindow.location.href = res.pay_url;
-                        else window.location.href = res.pay_url;
-                        document.getElementById('waitingModal').style.display = 'flex';
+                        
+                        if (isTelegram) {
+                            // ВНУТРИ TELEGRAM: перенаправляем текущее окно
+                            window.location.href = res.pay_url;
+                        } else {
+                            // В БРАУЗЕРЕ: используем новую вкладку
+                            if (newWindow) newWindow.location.href = res.pay_url;
+                            else window.location.href = res.pay_url;
+                            document.getElementById('waitingModal').style.display = 'flex';
+                        }
                     } else {
                         hideLoader(); if (newWindow) newWindow.close();
                         alert("Сервер не вернул ссылку.");
