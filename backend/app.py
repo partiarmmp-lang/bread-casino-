@@ -47,8 +47,6 @@ def get_telegram_user_id():
         if clean_id: return int(clean_id)
     return None
 
-# ================= БАЗОВЫЕ ЭНДПОИНТЫ =================
-
 @app.route("/api/balance")
 def api_balance():
     user_id = get_telegram_user_id()
@@ -70,21 +68,17 @@ def api_register():
     
     try:
         is_new = False
-        # Если есть реферал, привязываем
         if ref_id:
             is_new = run_async(set_referrer(user_id, ref_id))
         
-        # Если баланс 0, даем бонус 0.10 USDT
         bal = run_async(get_total_balance(user_id))
         if bal == 0.0:
-            run_async(add_bonus(user_id, 0.10, 3.0)) # Выдаем 0.10 в бонусный
+            run_async(add_bonus(user_id, 0.10, 3.0))
             run_async(log_tx(user_id, "bonus", 0.10, "welcome"))
             
         return jsonify({"ok": True, "is_new": is_new})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
-# ================= ИГРЫ =================
 
 def place_bet(user_id, amount):
     if run_async(try_deduct_bonus(user_id, amount)):
@@ -130,8 +124,6 @@ def api_play_plinko():
 
     real, bonus = run_async(get_balance(user_id)), run_async(get_bonus_balance(user_id))
     return jsonify({"success": True, "mult": mult, "win": win_amount, "real": real, "bonus": bonus})
-
-# ================= ПЛАТЕЖИ =================
 
 @app.route("/api/topup", methods=["GET", "POST"])
 def api_topup():
