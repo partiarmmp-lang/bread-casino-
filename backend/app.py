@@ -2,16 +2,18 @@ import asyncio
 import os
 import re
 import threading
+import requests
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
-from aiorocket2 import xRocketClient
 from database import init_db, get_total_balance, update_balance, try_deduct_balance, log_tx
 
 load_dotenv()
 
 XROCKET_TOKEN = os.getenv("XROCKET_TOKEN", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNzM2MiIsImp0aSI6ImFwcDozMDczNjI6ZDJjN2I2NDYtYzc3OC00ZjA3LWFkNDYtMGZiNDhjZTU3ZDU4IiwiaWF0IjoxNzkzNDY4MjYxfQ.a_Ml3oa5mBXnAMcQZDBS_G9JO-yu_TtUt10hfe3gaKE")
+XROCKET_API_URL = "https://pay.xrocket.tg/api"
 
+# Асинхронный цикл для базы данных (asyncpg)
 _loop = asyncio.new_event_loop()
 asyncio.set_event_loop(_loop)
 
@@ -24,14 +26,6 @@ threading.Thread(target=_start_loop, args=(_loop,), daemon=True).start()
 def run_async(coro):
     future = asyncio.run_coroutine_threadsafe(coro, _loop)
     return future.result()
-
-rocket = None
-
-async def _init_rocket():
-    global rocket
-    rocket = xRocketClient(api_key=XROCKET_TOKEN)
-
-run_async(_init_rocket())
 
 app = Flask(__name__)
 CORS(app)
@@ -73,47 +67,65 @@ def api_topup():
     if amount < 0.05: 
         return jsonify({"error": "Минимум 0.05 USDT"}), 400
 
-    async def _create_invoice():
-        return await rocket.create_invoice(
-            currency="USDT",
-            amount=amount,
-            description=f"Bread Casino ID: {user_id}"
-        )
+    # Прямой запрос к API xRocket (без библиотек)
+    headers = {
+        "Rocket-Pay-Key": XROCKET_TOKEN,
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "amount": amount,
+        "currency": "USDT",
+        "description": f"Bread Casino ID: {user_id}",
+        "hiddenMessage": "Спасибо за пополнение!",
+        "commentsEnabled": False
+    }
 
     try:
-        invoice = run_async(_create_invoice())
-        
-        pay_url = getattr(invoice, 'link', None) or getattr(invoice, 'url', None)
+        response = requests.post(f"{XROCKET_API_URL}/createInvoice", json=payload, headers=headers, timeout=10)
+        res_data = response.json()
+
+        if response.status_code != 200:
+            return jsonify({"error": f"xRocket вернул ошибку: {res_data}"}), 500
+
+        # Ищем ссылку в ответе сервера
+        pay_url = res_data.get("data", {}).get("link")
         
         if not pay_url:
-            return jsonify({"error": "xRocket не вернул ссылку на оплату"}), 500
+            return jsonify({"error": f"xRocket не вернул ссылку. Ответ: {res_data}"}), 500
 
         return jsonify({
-            "invoice_id": invoice.id,
+            "invoice_id": res_data.get("data", {}).get("id"),
             "pay_url": pay_url,
             "amount": amount
         })
     except Exception as e:
         print(f"ОШИБКА xROCKET: {e}")
-        return jsonify({"error": f"Ошибка платежки: {str(e)}"}), 500
+        return jsonify({"error": f"Ошибка соединения с xRocket: {str(e)}"}), 500
 
 @app.route("/api/check_payment/<invoice_id>")
 def api_check_payment(invoice_id):
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
 
-    async def _check():
-        return await rocket.get_invoice(invoice_id)
+    headers = {
+        "Rocket-Pay-Key": XROCKET_TOKEN,
+    }
+    payload = {"invoiceId": invoice_id}
 
     try:
-        inv = run_async(_check())
-        if inv.status == "paid":
-            amount = float(inv.amount)
+        response = requests.post(f"{XROCKET_API_URL}/getInvoice", json=payload, headers=headers, timeout=10)
+        res_data = response.json()
+        
+        status = res_data.get("data", {}).get("status")
+        
+        if status == "paid":
+            amount = float(res_data.get("data", {}).get("amount"))
             run_async(update_balance(user_id, amount))
             run_async(log_tx(user_id, "deposit", amount, f"xrocket_{invoice_id}"))
             return jsonify({"paid": True, "amount": amount})
         
-        return jsonify({"paid": False, "status": inv.status})
+        return jsonify({"paid": False, "status": status})
     except Exception as e:
         return jsonify({"paid": False, "error": str(e)}), 500
 
@@ -136,16 +148,27 @@ def api_withdraw():
     if not run_async(try_deduct_balance(user_id, amount)):
         return jsonify({"error": "Недостаточно средств"}), 400
 
-    async def _payout():
-        return await rocket.create_payout(
-            user_id=int(target_id),
-            currency="USDT",
-            amount=amount,
-            description="Withdraw from Bread Casino"
-        )
+    headers = {
+        "Rocket-Pay-Key": XROCKET_TOKEN,
+        "Content-Type": "application/json"
+    }
+    
+    payload = {
+        "user_id": int(target_id),
+        "currency": "USDT",
+        "amount": amount,
+        "description": "Withdraw from Bread Casino"
+    }
 
     try:
-        run_async(_payout())
+        response = requests.post(f"{XROCKET_API_URL}/createWithdrawal", json=payload, headers=headers, timeout=10)
+        res_data = response.json()
+        
+        if response.status_code != 200:
+             # Возвращаем баланс если вывод не удался
+            run_async(update_balance(user_id, amount))
+            return jsonify({"error": f"xRocket ошибка: {res_data}"}), 500
+
         run_async(log_tx(user_id, "withdraw", -amount, f"xrocket_payout_{target_id}"))
         return jsonify({"ok": True})
     except Exception as e:
