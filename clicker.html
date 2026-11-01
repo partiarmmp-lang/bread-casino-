@@ -60,7 +60,6 @@
         <div class="progress-bar"><div class="progress-fill" id="energy-bar"></div></div>
     </div>
 
-    <!-- Модалка магазина -->
     <div id="shopModal">
         <h2 style="color:#ffcc00; margin-bottom: 20px;">🛒 Магазин</h2>
         <div style="font-size:14px; color:#aaa; margin-bottom:15px;">У вас: <span id="shop-coins" style="color:#ffcc00; font-weight:bold;">0</span> монет</div>
@@ -86,7 +85,7 @@
         let energy = 100;
         let limit = 100;
         let userId = null;
-        let pendingClicks = 0; // Сюда копим клики
+        let pendingClicks = 0; 
 
         function getUserId() {
             const tg = window.Telegram?.WebApp;
@@ -98,16 +97,20 @@
 
         userId = getUserId();
         if (!userId) {
-            alert("Ошибка авторизации! Пожалуйста, зайдите через главную страницу сайта.");
+            alert("Ошибка авторизации!");
             window.location.href = 'index.html';
         }
 
-        // Принудительное сохранение перед выходом
+        // ПРИНУДИТЕЛЬНОЕ СОХРАНЕНИЕ ПЕРЕД ВЫХОДОМ
         function goBack() { 
             if (pendingClicks > 0) {
-                sendClicks(pendingClicks);
+                // Отправляем синхронно, чтобы точно сохранилось
+                const xhr = new XMLHttpRequest();
+                xhr.open("POST", API_URL + '/api/clicker/click?user_id=' + userId, false); // false = синхронный запрос
+                xhr.setRequestHeader("Content-Type", "application/json");
+                xhr.send(JSON.stringify({ count: pendingClicks }));
             }
-            setTimeout(() => { window.location.href = 'index.html'; }, 200);
+            window.location.href = 'index.html';
         }
 
         function fetchData() {
@@ -135,31 +138,29 @@
             else document.getElementById('energy-bar').style.background = 'linear-gradient(90deg, #00ff00, #ccff00)';
         }
 
-        // Функция отправки кликов на сервер
-        async function sendClicks(count) {
-            if (count <= 0) return;
-            pendingClicks -= count; // Сразу убираем из ожидания
+        // ОТПРАВЛЯЕМ ПАЧКУ КЛИКОВ НА СЕРВЕР
+        async function sendClicks() {
+            if (pendingClicks <= 0) return;
+            const toSend = pendingClicks;
+            pendingClicks = 0; // Сбрасываем счетчик
+
             try {
                 const res = await fetch(API_URL + '/api/clicker/click?user_id=' + userId, {
                     method: 'POST', 
                     headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify({ count: count }) // Отправляем пачку
+                    body: JSON.stringify({ count: toSend }) 
                 });
                 const data = await res.json();
-                if (data.error) {
-                    pendingClicks += count; // Если ошибка, возвращаем
-                    return;
-                }
+                if (data.error) return;
                 coins = data.coins; energy = data.energy; updateUI();
             } catch (err) { 
-                pendingClicks += count; // Если сеть упала, возвращаем
+                pendingClicks += toSend; // Если ошибка сети, возвращаем клики
             }
         }
 
         function handleClick(e) {
             if (energy < 1) return alert("Энергия закончилась! Ждите восстановления.");
             
-            // Мгновенно показываем результат
             coins++; energy--; pendingClicks++;
             updateUI();
 
@@ -170,14 +171,9 @@
             setTimeout(() => float.remove(), 800);
         }
 
-        // Раз в секунду отправляем накопленные клики на сервер
-        setInterval(() => {
-            if (pendingClicks > 0) {
-                sendClicks(pendingClicks);
-            }
-        }, 1000);
+        // ОТПРАВЛЯЕМ РАЗ В 5 СЕКУНД (чтобы сервер не упал)
+        setInterval(sendClicks, 5000);
 
-        // Восстановление энергии (визуально)
         setInterval(() => {
             if (energy < limit) { energy += 0.1; if (energy > limit) energy = limit; updateUI(); }
         }, 1000);
@@ -187,6 +183,11 @@
 
         async function buyItem(item, cost) {
             if (coins < cost) return alert("Недостаточно монет!");
+            
+            // Сначала синхронизируем текущие клики, чтобы монет хватило
+            await sendClicks();
+            if (coins < cost) return alert("Недостаточно монет!");
+
             try {
                 const res = await fetch(API_URL + '/api/clicker/buy?user_id=' + userId, {
                     method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -195,7 +196,7 @@
                 const data = await res.json();
                 if (data.error) return alert(data.error);
                 
-                alert("Покупка успешна! Награда зачислена.");
+                alert("Покупка успешна!");
                 fetchData();
             } catch (e) { alert("Ошибка сервера"); }
         }
