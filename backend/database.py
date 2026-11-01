@@ -2,8 +2,8 @@ import asyncpg
 import os
 import secrets
 import string
-import datetime
 
+# Берем URL из переменных окружения. Убедись, что в Render добавлена переменная DATABASE_URL
 DB_URL = os.environ.get(
     'DATABASE_URL', 
     'postgresql://postgres.nweygfqvmlwdmdnddxre:Dundel2009!.@aws-1-eu-west-3.pooler.supabase.com:6543/postgres'
@@ -22,10 +22,6 @@ def _uid(user_id):
         return int(user_id)
     except (ValueError, TypeError):
         return abs(hash(str(user_id))) % (10**15)
-
-def _gen_code(length=10):
-    alphabet = string.ascii_uppercase + string.digits
-    return "".join(secrets.choice(alphabet) for _ in range(length))
 
 async def init_db():
     pool = await get_pool()
@@ -54,26 +50,7 @@ async def init_db():
                 monthly_deposits DOUBLE PRECISION DEFAULT 0.0,
                 total_bonus_purchases DOUBLE PRECISION DEFAULT 0.0,
                 bonus_purchase_count INTEGER DEFAULT 0,
-                language TEXT DEFAULT NULL,
-                coins INTEGER DEFAULT 0,
-                energy INTEGER DEFAULT 100,
-                energy_limit INTEGER DEFAULT 100,
-                last_energy_reset TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_daily_bonus TIMESTAMP DEFAULT NULL,
-                pending_deposit_bonus DOUBLE PRECISION DEFAULT 0.0,
-                daily_streak INTEGER DEFAULT 0,
-                last_streak_day TEXT,
-                last_wheel_spin TEXT,
-                wheel_total_spins INTEGER DEFAULT 0
-            )
-        """)
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS luck_log (
-                id SERIAL PRIMARY KEY,
-                user_id BIGINT,
-                reward TEXT,
-                amount DOUBLE PRECISION,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                language TEXT DEFAULT NULL
             )
         """)
         await db.execute("""
@@ -86,87 +63,13 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS promocodes (
-                code TEXT PRIMARY KEY,
-                amount DOUBLE PRECISION NOT NULL,
-                max_uses INTEGER NOT NULL,
-                uses INTEGER DEFAULT 0,
-                created_by BIGINT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS promo_activations (
-                code TEXT NOT NULL,
-                user_id BIGINT NOT NULL,
-                activated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (code, user_id)
-            )
-        """)
-        await db.execute("""
-            CREATE TABLE IF NOT EXISTS checks (
-                code TEXT PRIMARY KEY,
-                amount DOUBLE PRECISION NOT NULL,
-                created_by BIGINT,
-                claimed_by BIGINT,
-                claimed_at TIMESTAMP,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        """)
-
-async def get_language(user_id):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT language FROM users WHERE user_id = $1", _uid(user_id))
-        return row['language'] if row else None
-
-async def set_language(user_id, lang: str):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-        await db.execute("UPDATE users SET language = $1 WHERE user_id = $2", lang, _uid(user_id))
-
-async def log_tx(user_id, tx_type: str, amount: float, meta: str = ""):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO transactions (user_id, type, amount, meta) VALUES ($1, $2, $3, $4)", _uid(user_id), tx_type, amount, meta)
-
-async def get_transactions(user_id, limit: int = 15):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        rows = await db.fetch("SELECT type, amount, meta, created_at FROM transactions WHERE user_id = $1 ORDER BY id DESC LIMIT $2", _uid(user_id), limit)
-        return [(r['type'], r['amount'], r['meta'], r['created_at']) for r in rows]
-
-async def is_new_user(user_id) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT user_id FROM users WHERE user_id = $1", _uid(user_id))
-        return row is None
-
-async def get_balance(user_id) -> float:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT balance FROM users WHERE user_id = $1", _uid(user_id))
-        if row is None:
-            await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-            return 0.0
-        return row['balance'] or 0.0
-
-async def get_bonus_balance(user_id) -> float:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT bonus_balance FROM users WHERE user_id = $1", _uid(user_id))
-        return (row['bonus_balance'] or 0.0) if row else 0.0
-
-async def get_wager_info(user_id):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT wager_required, wager_done FROM users WHERE user_id = $1", _uid(user_id))
-        return (row['wager_required'] or 0.0, row['wager_done'] or 0.0) if row else (0.0, 0.0)
 
 async def get_total_balance(user_id) -> float:
-    return await get_balance(user_id) + await get_bonus_balance(user_id)
+    pool = await get_pool()
+    async with pool.acquire() as db:
+        row = await db.fetchrow("SELECT balance, bonus_balance FROM users WHERE user_id = $1", _uid(user_id))
+        if not row: return 0.0
+        return (row['balance'] or 0.0) + (row['bonus_balance'] or 0.0)
 
 async def update_balance(user_id, amount: float):
     pool = await get_pool()
@@ -181,266 +84,7 @@ async def try_deduct_balance(user_id, amount: float) -> bool:
         res = await db.execute("UPDATE users SET balance = balance - $1 WHERE user_id = $2 AND balance >= $1", amount, _uid(user_id))
         return res == "UPDATE 1"
 
-async def try_deduct_bonus(user_id, amount: float) -> bool:
+async def log_tx(user_id, tx_type: str, amount: float, meta: str = ""):
     pool = await get_pool()
     async with pool.acquire() as db:
-        res = await db.execute("UPDATE users SET bonus_balance = bonus_balance - $1 WHERE user_id = $2 AND bonus_balance >= $1", amount, _uid(user_id))
-        return res == "UPDATE 1"
-
-async def add_bonus(user_id, amount: float, wager_multiplier: float = 3.0):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-        await db.execute("UPDATE users SET bonus_balance = bonus_balance + $1, wager_required = wager_required + $2 WHERE user_id = $3", amount, amount * wager_multiplier, _uid(user_id))
-
-async def add_wager_progress(user_id, amount: float):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT wager_required, wager_done, bonus_balance FROM users WHERE user_id = $1", _uid(user_id))
-        if not row: return
-        req, done, bonus = row['wager_required'] or 0.0, row['wager_done'] or 0.0, row['bonus_balance'] or 0.0
-        done += amount
-        if done >= req and req > 0:
-            await db.execute("UPDATE users SET balance = balance + $1, bonus_balance = 0.0, wager_required = 0.0, wager_done = 0.0 WHERE user_id = $2", bonus, _uid(user_id))
-        else:
-            await db.execute("UPDATE users SET wager_done = $1 WHERE user_id = $2", done, _uid(user_id))
-
-async def transfer_between_users(from_id, to_id, amount: float) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(from_id))
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(to_id))
-        res = await db.execute("UPDATE users SET balance = balance - $1 WHERE user_id = $2 AND balance >= $1", amount, _uid(from_id))
-        if res != "UPDATE 1": return False
-        await db.execute("UPDATE users SET balance = balance + $1 WHERE user_id = $2", amount, _uid(to_id))
-        return True
-        async def set_referrer_full(user_id, lvl1_id):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-        row = await db.fetchrow("SELECT referrer_id FROM users WHERE user_id = $1", _uid(user_id))
-        if row and row['referrer_id']: return False
-        lvl2_id, lvl3_id = None, None
-        r = await db.fetchrow("SELECT referrer_id FROM users WHERE user_id = $1", _uid(lvl1_id))
-        if r and r['referrer_id']:
-            lvl2_id = r['referrer_id']
-            r2 = await db.fetchrow("SELECT referrer_id FROM users WHERE user_id = $1", _uid(lvl2_id))
-            if r2 and r2['referrer_id']: lvl3_id = r2['referrer_id']
-        await db.execute("UPDATE users SET referrer_id = $1, referrer_lvl2 = $2, referrer_lvl3 = $3 WHERE user_id = $4", _uid(lvl1_id), lvl2_id, lvl3_id, _uid(user_id))
-        return True
-
-async def get_referrers_chain(user_id):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT referrer_id, referrer_lvl2, referrer_lvl3 FROM users WHERE user_id = $1", _uid(user_id))
-        return [row['referrer_id'], row['referrer_lvl2'], row['referrer_lvl3']] if row else [None, None, None]
-
-async def get_referrer(user_id):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT referrer_id FROM users WHERE user_id = $1", _uid(user_id))
-        return row['referrer_id'] if row else None
-
-async def get_referral_count(user_id) -> int:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT COUNT(*) as c FROM users WHERE referrer_id = $1", _uid(user_id))
-        return row['c'] if row else 0
-
-async def get_referral_earnings(user_id) -> float:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT ref_earnings FROM users WHERE user_id = $1", _uid(user_id))
-        return row['ref_earnings'] if row else 0.0
-
-async def add_ref_earning(referrer_id, amount: float):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(referrer_id))
-        await db.execute("UPDATE users SET balance = balance + $1, ref_earnings = ref_earnings + $1 WHERE user_id = $2", amount, _uid(referrer_id))
-
-async def add_loss(user_id, amount: float):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-        await db.execute("UPDATE users SET total_lost = total_lost + $1, weekly_lost = weekly_lost + $1 WHERE user_id = $2", amount, _uid(user_id))
-
-async def is_first_deposit(user_id) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT deposit_count FROM users WHERE user_id = $1", _uid(user_id))
-        return not (row and row['deposit_count'] and row['deposit_count'] > 0)
-
-async def mark_deposit(user_id, amount: float):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-        await db.execute("UPDATE users SET first_deposit_done = 1, deposit_count = deposit_count + 1, total_deposits = total_deposits + $1 WHERE user_id = $2", amount, _uid(user_id))
-        await db.execute("UPDATE users SET monthly_deposits = monthly_deposits + $1 WHERE user_id = $2", amount, _uid(user_id))
-
-async def has_deposit(user_id) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT total_deposits FROM users WHERE user_id = $1", _uid(user_id))
-        return bool(row and row['total_deposits'] and row['total_deposits'] > 0)
-
-async def give_channel_bonus(user_id, amount=5.0) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT channel_bonus_given FROM users WHERE user_id = $1", _uid(user_id))
-        if row and row['channel_bonus_given']: return False
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-        await db.execute("UPDATE users SET balance = balance + $1, channel_bonus_given = 1 WHERE user_id = $2", amount, _uid(user_id))
-        return True
-
-async def add_freespins(user_id, roulette: int = 0, lottery: int = 0):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-        await db.execute("UPDATE users SET roulette_freespins = roulette_freespins + $1, free_lottery_tickets = free_lottery_tickets + $2 WHERE user_id = $3", roulette, lottery, _uid(user_id))
-
-async def get_freespins(user_id):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT roulette_freespins, free_lottery_tickets FROM users WHERE user_id = $1", _uid(user_id))
-        return (row['roulette_freespins'] or 0, row['free_lottery_tickets'] or 0) if row else (0, 0)
-
-async def use_roulette_freespin(user_id) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        res = await db.execute("UPDATE users SET roulette_freespins = roulette_freespins - 1 WHERE user_id = $1 AND roulette_freespins > 0", _uid(user_id))
-        return res == "UPDATE 1"
-
-async def use_lottery_tickets(user_id, count: int) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        res = await db.execute("UPDATE users SET free_lottery_tickets = free_lottery_tickets - $1 WHERE user_id = $2 AND free_lottery_tickets >= $1", count, _uid(user_id))
-        return res == "UPDATE 1"
-
-async def set_partner_percent(user_id, percent):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("CREATE TABLE IF NOT EXISTS partner_percents (user_id BIGINT PRIMARY KEY, percent DOUBLE PRECISION NOT NULL)")
-        await db.execute("INSERT INTO partner_percents (user_id, percent) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET percent = EXCLUDED.percent", _uid(user_id), float(percent))
-
-async def get_partner_percent(user_id, default=10.0):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("CREATE TABLE IF NOT EXISTS partner_percents (user_id BIGINT PRIMARY KEY, percent DOUBLE PRECISION NOT NULL)")
-        row = await db.fetchrow("SELECT percent FROM partner_percents WHERE user_id = $1", _uid(user_id))
-        return row['percent'] if row else default
-        async def set_referrer_full(user_id, lvl1_id):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-        row = await db.fetchrow("SELECT referrer_id FROM users WHERE user_id = $1", _uid(user_id))
-        if row and row['referrer_id']: return False
-        lvl2_id, lvl3_id = None, None
-        r = await db.fetchrow("SELECT referrer_id FROM users WHERE user_id = $1", _uid(lvl1_id))
-        if r and r['referrer_id']:
-            lvl2_id = r['referrer_id']
-            r2 = await db.fetchrow("SELECT referrer_id FROM users WHERE user_id = $1", _uid(lvl2_id))
-            if r2 and r2['referrer_id']: lvl3_id = r2['referrer_id']
-        await db.execute("UPDATE users SET referrer_id = $1, referrer_lvl2 = $2, referrer_lvl3 = $3 WHERE user_id = $4", _uid(lvl1_id), lvl2_id, lvl3_id, _uid(user_id))
-        return True
-
-async def get_referrers_chain(user_id):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT referrer_id, referrer_lvl2, referrer_lvl3 FROM users WHERE user_id = $1", _uid(user_id))
-        return [row['referrer_id'], row['referrer_lvl2'], row['referrer_lvl3']] if row else [None, None, None]
-
-async def get_referrer(user_id):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT referrer_id FROM users WHERE user_id = $1", _uid(user_id))
-        return row['referrer_id'] if row else None
-
-async def get_referral_count(user_id) -> int:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT COUNT(*) as c FROM users WHERE referrer_id = $1", _uid(user_id))
-        return row['c'] if row else 0
-
-async def get_referral_earnings(user_id) -> float:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT ref_earnings FROM users WHERE user_id = $1", _uid(user_id))
-        return row['ref_earnings'] if row else 0.0
-
-async def add_ref_earning(referrer_id, amount: float):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(referrer_id))
-        await db.execute("UPDATE users SET balance = balance + $1, ref_earnings = ref_earnings + $1 WHERE user_id = $2", amount, _uid(referrer_id))
-
-async def add_loss(user_id, amount: float):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-        await db.execute("UPDATE users SET total_lost = total_lost + $1, weekly_lost = weekly_lost + $1 WHERE user_id = $2", amount, _uid(user_id))
-
-async def is_first_deposit(user_id) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT deposit_count FROM users WHERE user_id = $1", _uid(user_id))
-        return not (row and row['deposit_count'] and row['deposit_count'] > 0)
-
-async def mark_deposit(user_id, amount: float):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-        await db.execute("UPDATE users SET first_deposit_done = 1, deposit_count = deposit_count + 1, total_deposits = total_deposits + $1 WHERE user_id = $2", amount, _uid(user_id))
-        await db.execute("UPDATE users SET monthly_deposits = monthly_deposits + $1 WHERE user_id = $2", amount, _uid(user_id))
-
-async def has_deposit(user_id) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT total_deposits FROM users WHERE user_id = $1", _uid(user_id))
-        return bool(row and row['total_deposits'] and row['total_deposits'] > 0)
-
-async def give_channel_bonus(user_id, amount=5.0) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT channel_bonus_given FROM users WHERE user_id = $1", _uid(user_id))
-        if row and row['channel_bonus_given']: return False
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-        await db.execute("UPDATE users SET balance = balance + $1, channel_bonus_given = 1 WHERE user_id = $2", amount, _uid(user_id))
-        return True
-
-async def add_freespins(user_id, roulette: int = 0, lottery: int = 0):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
-        await db.execute("UPDATE users SET roulette_freespins = roulette_freespins + $1, free_lottery_tickets = free_lottery_tickets + $2 WHERE user_id = $3", roulette, lottery, _uid(user_id))
-
-async def get_freespins(user_id):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT roulette_freespins, free_lottery_tickets FROM users WHERE user_id = $1", _uid(user_id))
-        return (row['roulette_freespins'] or 0, row['free_lottery_tickets'] or 0) if row else (0, 0)
-
-async def use_roulette_freespin(user_id) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        res = await db.execute("UPDATE users SET roulette_freespins = roulette_freespins - 1 WHERE user_id = $1 AND roulette_freespins > 0", _uid(user_id))
-        return res == "UPDATE 1"
-
-async def use_lottery_tickets(user_id, count: int) -> bool:
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        res = await db.execute("UPDATE users SET free_lottery_tickets = free_lottery_tickets - $1 WHERE user_id = $2 AND free_lottery_tickets >= $1", count, _uid(user_id))
-        return res == "UPDATE 1"
-
-async def set_partner_percent(user_id, percent):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("CREATE TABLE IF NOT EXISTS partner_percents (user_id BIGINT PRIMARY KEY, percent DOUBLE PRECISION NOT NULL)")
-        await db.execute("INSERT INTO partner_percents (user_id, percent) VALUES ($1, $2) ON CONFLICT (user_id) DO UPDATE SET percent = EXCLUDED.percent", _uid(user_id), float(percent))
-
-async def get_partner_percent(user_id, default=10.0):
-    pool = await get_pool()
-    async with pool.acquire() as db:
-        await db.execute("CREATE TABLE IF NOT EXISTS partner_percents (user_id BIGINT PRIMARY KEY, percent DOUBLE PRECISION NOT NULL)")
-        row = await db.fetchrow("SELECT percent FROM partner_percents WHERE user_id = $1", _uid(user_id))
-        return row['percent'] if row else default
+        await db.execute("INSERT INTO transactions (user_id, type, amount, meta) VALUES ($1, $2, $3, $4)", _uid(user_id), tx_type, amount, meta)
