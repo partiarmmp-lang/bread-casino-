@@ -8,31 +8,25 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap');
         body { background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%); color: white; font-family: 'Montserrat', sans-serif; text-align: center; margin: 0; padding: 0; overflow: hidden; user-select: none; display: flex; flex-direction: column; align-items: center; height: 100vh; }
-        
         .header { width: 100%; padding: 15px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; background: rgba(0,0,0,0.5); position: absolute; top: 0; z-index: 10; }
         .back-btn { background: #333; color: white; border: none; padding: 8px 15px; border-radius: 10px; font-weight: bold; cursor: pointer; }
-        
         .stats-panel { position: absolute; top: 70px; width: 100%; display: flex; justify-content: center; }
         .stat-box { background: rgba(255,204,0,0.1); border: 1px solid #ffcc00; padding: 10px 30px; border-radius: 15px; }
         .stat-val { font-size: 28px; color: #ffcc00; font-weight: 900; }
-        
         .click-area { flex: 1; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; margin-top: 50px; }
         .coin { width: 250px; height: 250px; background: radial-gradient(circle at 30% 30%, #ffe066, #ffb300, #cc8800); border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 120px; cursor: pointer; box-shadow: 0 0 50px rgba(255,204,0,0.4), inset 0 0 20px rgba(0,0,0,0.5); border: 8px solid #b37700; transition: transform 0.1s; }
         .coin:active { transform: scale(0.95); }
-        
         .floating-text { position: absolute; color: #fff; font-size: 36px; font-weight: 900; pointer-events: none; animation: floatUp 0.8s ease-out forwards; text-shadow: 0 0 10px #ffcc00; z-index: 100; }
         @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-100px) scale(1.5); } }
-
         .energy-panel { position: absolute; bottom: 0; width: 100%; padding: 30px 20px; background: linear-gradient(0deg, #000 0%, transparent 100%); box-sizing: border-box; }
         .energy-text { font-size: 20px; color: #fff; margin-bottom: 10px; font-weight: bold; }
         .progress-bar { width: 85%; height: 15px; background: #333; border-radius: 10px; margin: 0 auto; overflow: hidden; border: 1px solid #555; }
         .progress-fill { height: 100%; background: linear-gradient(90deg, #00ff00, #ccff00); width: 100%; transition: width 0.3s; box-shadow: 0 0 10px #00ff00; }
-
         .shop-btn { position: absolute; right: 20px; bottom: 80px; background: #ffcc00; color: #000; border: none; width: 60px; height: 60px; border-radius: 50%; font-size: 30px; cursor: pointer; box-shadow: 0 5px 15px rgba(255,204,0,0.4); z-index: 20; }
-
         #shopModal { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; flex-direction: column; align-items: center; justify-content: center; }
         .shop-item { background: #1a1a1a; border: 1px solid #ffcc00; padding: 15px; border-radius: 15px; width: 80%; max-width: 300px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; }
         .shop-item button { background: #00c853; color: white; border: none; padding: 8px 15px; border-radius: 8px; font-weight: bold; cursor: pointer; }
+        #loader { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 2000; justify-content: center; align-items: center; color: #ffcc00; font-weight: bold; font-size: 20px; }
     </style>
 </head>
 <body>
@@ -41,51 +35,24 @@
         <div style="font-weight:900; color:#ffcc00;">🪙 КЛИКЕР</div>
         <div style="width:70px;"></div>
     </div>
-
-    <div class="stats-panel">
-        <div class="stat-box">
-            <div style="font-size:12px; color:#aaa;">МОНЕТЫ</div>
-            <div class="stat-val" id="coins-display">0</div>
-        </div>
-    </div>
-
-    <div class="click-area" id="clickArea">
-        <div class="coin" id="coin" onclick="handleClick(event)">🪙</div>
-    </div>
-
+    <div class="stats-panel"><div class="stat-box"><div style="font-size:12px; color:#aaa;">МОНЕТЫ</div><div class="stat-val" id="coins-display">0</div></div></div>
+    <div class="click-area" id="clickArea"><div class="coin" id="coin" onclick="handleClick(event)">🪙</div></div>
     <button class="shop-btn" onclick="openShop()">🛒</button>
-
-    <div class="energy-panel">
-        <div class="energy-text"><span id="energy-display">100</span> / <span id="limit-display">100</span> ⚡</div>
-        <div class="progress-bar"><div class="progress-fill" id="energy-bar"></div></div>
-    </div>
+    <div class="energy-panel"><div class="energy-text"><span id="energy-display">100</span> / <span id="limit-display">100</span> ⚡</div><div class="progress-bar"><div class="progress-fill" id="energy-bar"></div></div></div>
 
     <div id="shopModal">
         <h2 style="color:#ffcc00; margin-bottom: 20px;">🛒 Магазин</h2>
         <div style="font-size:14px; color:#aaa; margin-bottom:15px;">У вас: <span id="shop-coins" style="color:#ffcc00; font-weight:bold;">0</span> монет</div>
-        
-        <div class="shop-item">
-            <div>🎰 1 Фриспин</div>
-            <button onclick="buyItem('freespin', 100)">100 🪙</button>
-        </div>
-        <div class="shop-item">
-            <div>💳 Бонус +10% к депо</div>
-            <button onclick="buyItem('bonus10', 300)">300 🪙</button>
-        </div>
-        <div class="shop-item">
-            <div>⚡ +20 к лимиту энергии</div>
-            <button onclick="buyItem('energy', 500)">500 🪙</button>
-        </div>
+        <div class="shop-item"><div>🎰 1 Фриспин</div><button onclick="buyItem('freespin', 100)">100 🪙</button></div>
+        <div class="shop-item"><div>💳 Бонус +10% к депо</div><button onclick="buyItem('bonus10', 300)">300 🪙</button></div>
+        <div class="shop-item"><div>⚡ +20 к лимиту энергии</div><button onclick="buyItem('energy', 500)">500 🪙</button></div>
         <button onclick="closeShop()" style="background:#333; color:white; border:none; padding:12px 30px; border-radius:10px; font-weight:bold; margin-top:20px;">Закрыть</button>
     </div>
+    <div id="loader">Сохранение...</div>
 
     <script>
         const API_URL = 'https://bread-casino-14.onrender.com';
-        let coins = 0;
-        let energy = 100;
-        let limit = 100;
-        let userId = null;
-        let pendingClicks = 0; 
+        let coins = 0, energy = 100, limit = 100, userId = null, pendingClicks = 0;
 
         function getUserId() {
             const tg = window.Telegram?.WebApp;
@@ -94,21 +61,13 @@
             if (urlParams.has('id')) return urlParams.get('id');
             return localStorage.getItem('tg_user_id') || null;
         }
-
         userId = getUserId();
-        if (!userId) {
-            alert("Ошибка авторизации!");
-            window.location.href = 'index.html';
-        }
 
-        // ПРИНУДИТЕЛЬНОЕ СОХРАНЕНИЕ ПЕРЕД ВЫХОДОМ
-        function goBack() { 
+        // ЖДЕМ СОХРАНЕНИЯ И ТОЛЬКО ПОТОМ ВЫХОДИМ
+        async function goBack() { 
             if (pendingClicks > 0) {
-                // Отправляем синхронно, чтобы точно сохранилось
-                const xhr = new XMLHttpRequest();
-                xhr.open("POST", API_URL + '/api/clicker/click?user_id=' + userId, false); // false = синхронный запрос
-                xhr.setRequestHeader("Content-Type", "application/json");
-                xhr.send(JSON.stringify({ count: pendingClicks }));
+                document.getElementById('loader').style.display = 'flex';
+                await sendClicks(); // Ждем, пока сервер запишет
             }
             window.location.href = 'index.html';
         }
@@ -119,9 +78,7 @@
             .then(res => res.json())
             .then(data => {
                 if (data.error) return;
-                coins = data.coins;
-                energy = data.energy;
-                limit = data.limit;
+                coins = data.coins; energy = data.energy; limit = data.limit;
                 updateUI();
             });
         }
@@ -131,39 +88,27 @@
             document.getElementById('shop-coins').innerText = coins;
             document.getElementById('energy-display').innerText = Math.floor(energy);
             document.getElementById('limit-display').innerText = limit;
-            
             let percent = (energy / limit) * 100;
             document.getElementById('energy-bar').style.width = percent + '%';
-            if (percent < 20) document.getElementById('energy-bar').style.background = '#ff0000';
-            else document.getElementById('energy-bar').style.background = 'linear-gradient(90deg, #00ff00, #ccff00)';
         }
 
-        // ОТПРАВЛЯЕМ ПАЧКУ КЛИКОВ НА СЕРВЕР
         async function sendClicks() {
             if (pendingClicks <= 0) return;
             const toSend = pendingClicks;
-            pendingClicks = 0; // Сбрасываем счетчик
-
+            pendingClicks = 0; 
             try {
                 const res = await fetch(API_URL + '/api/clicker/click?user_id=' + userId, {
-                    method: 'POST', 
-                    headers: {'Content-Type': 'application/json'}, 
-                    body: JSON.stringify({ count: toSend }) 
+                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ count: toSend }) 
                 });
                 const data = await res.json();
                 if (data.error) return;
                 coins = data.coins; energy = data.energy; updateUI();
-            } catch (err) { 
-                pendingClicks += toSend; // Если ошибка сети, возвращаем клики
-            }
+            } catch (err) { pendingClicks += toSend; }
         }
 
         function handleClick(e) {
-            if (energy < 1) return alert("Энергия закончилась! Ждите восстановления.");
-            
-            coins++; energy--; pendingClicks++;
-            updateUI();
-
+            if (energy < 1) return alert("Энергия закончилась!");
+            coins++; energy--; pendingClicks++; updateUI();
             const float = document.createElement('div');
             float.className = 'floating-text'; float.innerText = '+1';
             float.style.left = (e.clientX - 20) + 'px'; float.style.top = (e.clientY - 50) + 'px';
@@ -171,36 +116,26 @@
             setTimeout(() => float.remove(), 800);
         }
 
-        // ОТПРАВЛЯЕМ РАЗ В 5 СЕКУНД (чтобы сервер не упал)
-        setInterval(sendClicks, 5000);
-
-        setInterval(() => {
-            if (energy < limit) { energy += 0.1; if (energy > limit) energy = limit; updateUI(); }
-        }, 1000);
+        setInterval(sendClicks, 3000);
+        setInterval(() => { if (energy < limit) { energy += 0.1; if (energy > limit) energy = limit; updateUI(); } }, 1000);
 
         function openShop() { document.getElementById('shopModal').style.display = 'flex'; }
         function closeShop() { document.getElementById('shopModal').style.display = 'none'; }
 
         async function buyItem(item, cost) {
             if (coins < cost) return alert("Недостаточно монет!");
-            
-            // Сначала синхронизируем текущие клики, чтобы монет хватило
-            await sendClicks();
+            await sendClicks(); // Синхронизируем перед покупкой
             if (coins < cost) return alert("Недостаточно монет!");
-
             try {
                 const res = await fetch(API_URL + '/api/clicker/buy?user_id=' + userId, {
-                    method: 'POST', headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ item: item })
+                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ item: item })
                 });
                 const data = await res.json();
                 if (data.error) return alert(data.error);
-                
                 alert("Покупка успешна!");
                 fetchData();
             } catch (e) { alert("Ошибка сервера"); }
         }
-
         fetchData();
     </script>
 </body>
