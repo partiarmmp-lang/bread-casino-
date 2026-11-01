@@ -3,6 +3,7 @@ import os
 import re
 import threading
 import requests
+import random
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -46,6 +47,8 @@ def get_telegram_user_id():
         if clean_id: return int(clean_id)
     return None
 
+# ================= БАЗОВЫЕ ЭНДПОИНТЫ =================
+
 @app.route("/api/balance")
 def api_balance():
     user_id = get_telegram_user_id()
@@ -57,22 +60,21 @@ def api_balance():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ЭНДПОИНТ РЕГИСТРАЦИИ (ДЛЯ РЕФЕРАЛКИ И БОНУСА)
 @app.route("/api/register", methods=["POST"])
 def api_register():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True) or request.args.to_dict() or {}
     ref_id = data.get("ref_id")
     
     try:
-        # Пытаемся установить реферера (если юзер новый)
         is_new = False
+        # Если есть реферал, привязываем
         if ref_id:
             is_new = run_async(set_referrer(user_id, ref_id))
         
-        # Даем бонус за первый вход, если баланс 0
+        # Если баланс 0, даем бонус 0.10 USDT
         bal = run_async(get_total_balance(user_id))
         if bal == 0.0:
             run_async(add_bonus(user_id, 0.10, 3.0)) # Выдаем 0.10 в бонусный
@@ -82,21 +84,25 @@ def api_register():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ЕДИНАЯ ФУНКЦИЯ СПИСАНИЯ СТАВКИ (СНАЧАЛА БОНУС, ПОТОМ РЕАЛ)
+# ================= ИГРЫ =================
+
 def place_bet(user_id, amount):
-    # 1. Пытаемся списать с бонусного
     if run_async(try_deduct_bonus(user_id, amount)):
         run_async(add_wager_progress(user_id, amount))
         run_async(log_tx(user_id, "bet", -amount, "bonus"))
         return "bonus"
-    # 2. Если бонусных не хватило, списываем с реального
     if run_async(try_deduct_balance(user_id, amount)):
         run_async(add_wager_progress(user_id, amount))
         run_async(log_tx(user_id, "bet", -amount, "main"))
         return "main"
     return None
 
-# Пример игры (Plinko) с новой логикой списания
+def process_loss_refs(user_id, bet):
+    lvl1, lvl2, lvl3 = run_async(get_referrers_chain(user_id))
+    if lvl1: run_async(add_ref_earning(lvl1, bet * 0.10))
+    if lvl2: run_async(add_ref_earning(lvl2, bet * 0.03))
+    if lvl3: run_async(add_ref_earning(lvl3, bet * 0.01))
+
 @app.route("/api/play", methods=["POST"])
 def api_play_plinko():
     user_id = get_telegram_user_id()
@@ -107,7 +113,6 @@ def api_play_plinko():
     paid_with = place_bet(user_id, bet)
     if not paid_with: return jsonify({"error": "Недостаточно средств"}), 400
 
-    import random
     r = random.random()
     if r < 0.60: mult = random.choice([0.2, 0.5])
     elif r < 0.85: mult = random.choice([1, 1.5])
@@ -121,14 +126,98 @@ def api_play_plinko():
         run_async(add_wager_progress(user_id, win_amount))
         run_async(log_tx(user_id, "win", win_amount, "plinko"))
     else:
-        # ПРОИГРЫШ: Начисляем реферальные проценты
-        lvl1, lvl2, lvl3 = run_async(get_referrers_chain(user_id))
-        if lvl1: run_async(add_ref_earning(lvl1, bet * 0.10)) # 10%
-        if lvl2: run_async(add_ref_earning(lvl2, bet * 0.03)) # 3%
-        if lvl3: run_async(add_ref_earning(lvl3, bet * 0.01)) # 1%
+        process_loss_refs(user_id, bet)
 
     real, bonus = run_async(get_balance(user_id)), run_async(get_bonus_balance(user_id))
     return jsonify({"success": True, "mult": mult, "win": win_amount, "real": real, "bonus": bonus})
 
-# ... Остальные эндпоинты (topup, check_payment, withdraw) оставляем как были ...
-# Скопируй их из предыдущего рабочего файла app.py
+# ================= ПЛАТЕЖИ =================
+
+@app.route("/api/topup", methods=["GET", "POST"])
+def api_topup():
+    user_id = get_telegram_user_id()
+    if not user_id: return jsonify({"error": "Unauthorized"}), 401
+    
+    data = request.get_json(silent=True) or request.args.to_dict() or {}
+    try: amount = float(data.get("amount", 1))
+    except: return jsonify({"error": "Неверная сумма"}), 400
+    
+    if amount < 0.05: return jsonify({"error": "Минимум 0.05 USDT"}), 400
+
+    headers = {"Authorization": f"Bearer {XROCKET_TOKEN}", "Content-Type": "application/json"}
+    payload = {"priceAmount": str(amount), "priceCurrency": "USDT", "description": f"Bread Casino ID: {user_id}", "numPayments": 1}
+
+    try:
+        response = requests.post(f"{XROCKET_API_URL}/invoices", json=payload, headers=headers, timeout=15)
+        try: res_data = response.json()
+        except: res_data = {"raw_text": response.text}
+
+        if response.status_code not in (200, 201):
+            return jsonify({"error": f"xRocket ошибка {response.status_code}: {res_data}"}), 500
+
+        links = res_data.get("links", {})
+        pay_url = links.get("webLink") or res_data.get("url") or links.get("telegramBotLink")
+        
+        if not pay_url:
+            return jsonify({"error": f"xRocket не вернул ссылку. Ответ: {res_data}"}), 500
+
+        return jsonify({"invoice_id": res_data.get("id"), "pay_url": pay_url, "amount": amount})
+    except Exception as e:
+        return jsonify({"error": f"Ошибка соединения: {str(e)}"}), 500
+
+@app.route("/api/check_payment/<invoice_id>")
+def api_check_payment(invoice_id):
+    user_id = get_telegram_user_id()
+    if not user_id: return jsonify({"error": "Unauthorized"}), 401
+
+    headers = {"Authorization": f"Bearer {XROCKET_TOKEN}"}
+    try:
+        response = requests.get(f"{XROCKET_API_URL}/invoices/{invoice_id}", headers=headers, timeout=10)
+        res_data = response.json()
+        status = res_data.get("status")
+        
+        if status == "paid":
+            amount = float(res_data.get("priceAmount", 0))
+            run_async(update_balance(user_id, amount))
+            run_async(log_tx(user_id, "deposit", amount, f"xrocket_{invoice_id}"))
+            return jsonify({"paid": True, "amount": amount})
+        return jsonify({"paid": False, "status": status})
+    except Exception as e:
+        return jsonify({"paid": False, "error": str(e)}), 500
+
+@app.route("/api/withdraw", methods=["POST"])
+def api_withdraw():
+    user_id = get_telegram_user_id()
+    if not user_id: return jsonify({"error": "Unauthorized"}), 401
+    
+    data = request.get_json(silent=True) or {}
+    try: amount = float(data.get("amount", 0))
+    except: return jsonify({"error": "Неверная сумма"}), 400
+        
+    target_id = data.get("xrocket_id")
+    if amount < 3.0: return jsonify({"error": "Минимум 3 USDT"}), 400
+    if not target_id: return jsonify({"error": "Укажите ваш xRocket ID"}), 400
+        
+    if not run_async(try_deduct_balance(user_id, amount)):
+        return jsonify({"error": "Недостаточно средств"}), 400
+
+    headers = {"Authorization": f"Bearer {XROCKET_TOKEN}", "Content-Type": "application/json"}
+    payload = {"userId": int(target_id), "currency": "USDT", "amount": str(amount), "description": "Withdraw from Bread Casino"}
+
+    try:
+        response = requests.post(f"{XROCKET_API_URL}/payouts", json=payload, headers=headers, timeout=15)
+        res_data = response.json()
+        
+        if response.status_code not in (200, 201):
+            run_async(update_balance(user_id, amount))
+            return jsonify({"error": f"xRocket ошибка: {res_data}"}), 500
+
+        run_async(log_tx(user_id, "withdraw", -amount, f"xrocket_payout_{target_id}"))
+        return jsonify({"ok": True})
+    except Exception as e:
+        run_async(update_balance(user_id, amount))
+        return jsonify({"error": str(e)}), 500
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
