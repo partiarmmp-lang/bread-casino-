@@ -18,6 +18,7 @@ load_dotenv()
 
 XROCKET_TOKEN = os.getenv("XROCKET_TOKEN", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNzM2MiIsImp0aSI6ImFwcDozMDczNjI6ZDJjN2I2NDYtYzc3OC00ZjA3LWFkNDYtMGZiNDhjZTU3ZDU4IiwiaWF0IjoxNzkzNDY4MjYxfQ.a_Ml3oa5mBXnAMcQZDBS_G9JO-yu_TtUt10hfe3gaKE")
 XROCKET_API_URL = "https://pay.api.xrocket.exchange/api/v1"
+DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres.nweygfqvmlwdmdnddxre:Dundel2009!.@aws-1-eu-west-3.pooler.supabase.com:6543/postgres")
 
 _loop = asyncio.new_event_loop()
 asyncio.set_event_loop(_loop)
@@ -76,11 +77,9 @@ def api_register():
             is_new_bonus = False
             
             if not row:
-                # Если юзера нет — создаем и сразу выдаем бонус
                 await db.execute("INSERT INTO users (user_id, balance, bonus_balance, wager_required, welcome_bonus_given) VALUES ($1, 0.0, 0.10, 0.30, 1)", int(user_id))
                 is_new_bonus = True
             else:
-                # Если юзер есть, но бонус не получал (0 или NULL)
                 if not row['welcome_bonus_given']:
                     await db.execute("UPDATE users SET bonus_balance = bonus_balance + 0.10, wager_required = wager_required + 0.30, welcome_bonus_given = 1 WHERE user_id = $1", int(user_id))
                     is_new_bonus = True
@@ -236,7 +235,7 @@ def api_lottery_buy():
     real, bonus = run_async(get_balance(user_id)), run_async(get_bonus_balance(user_id))
     return jsonify({"success": True, "winning": winning, "tickets": tickets, "total_win": total_win, "real": real, "bonus": bonus})
 
-# --- КЛИКЕР (ЗАЩИЩЕННАЯ ВЕРСИЯ) ---
+# --- КЛИКЕР ---
 async def _get_clicker_data(user_id):
     pool = await get_pool()
     async with pool.acquire() as db:
