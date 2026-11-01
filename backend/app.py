@@ -10,9 +10,7 @@ from database import init_db, get_total_balance, update_balance, try_deduct_bala
 
 load_dotenv()
 
-# ТОКЕН, КОТОРЫЙ ТЫ ПРИСЛАЛ В ПОСЛЕДНЕМ СООБЩЕНИИ
 XROCKET_TOKEN = os.getenv("XROCKET_TOKEN", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNzM2MiIsImp0aSI6ImFwcDozMDczNjI6ZDJjN2I2NDYtYzc3OC00ZjA3LWFkNDYtMGZiNDhjZTU3ZDU4IiwiaWF0IjoxNzkzNDY4MjYxfQ.a_Ml3oa5mBXnAMcQZDBS_G9JO-yu_TtUt10hfe3gaKE")
-
 XROCKET_API_URL = "https://pay.api.xrocket.exchange/api/v1"
 
 _loop = asyncio.new_event_loop()
@@ -73,7 +71,6 @@ def api_topup():
         "Content-Type": "application/json"
     }
     
-    # ПОЛЯ ИСПРАВЛЕНЫ ПО ДОКУМЕНТАЦИИ
     payload = {
         "priceAmount": str(amount),
         "priceCurrency": "USDT",
@@ -92,7 +89,13 @@ def api_topup():
         if response.status_code not in (200, 201):
             return jsonify({"error": f"xRocket вернул ошибку {response.status_code}: {res_data}"}), 500
 
-        pay_url = res_data.get("url") or res_data.get("data", {}).get("url")
+        # Извлекаем ВСЕ возможные ссылки из ответа
+        links = res_data.get("links", {})
+        web_link = links.get("webLink") or res_data.get("url")
+        tg_link = links.get("telegramBotLink") or links.get("telegramMiniAppLink")
+        
+        # Если webLink нет, но есть tg_link — используем его
+        pay_url = web_link or tg_link
         
         if not pay_url:
             return jsonify({"error": f"xRocket не вернул ссылку. Ответ: {res_data}"}), 500
@@ -100,6 +103,7 @@ def api_topup():
         return jsonify({
             "invoice_id": res_data.get("id"),
             "pay_url": pay_url,
+            "telegram_link": tg_link,
             "amount": amount
         })
     except Exception as e:
@@ -114,7 +118,7 @@ def api_check_payment(invoice_id):
     headers = {"Authorization": f"Bearer {XROCKET_TOKEN}"}
     
     try:
-        response = requests.get(f"{XROCKET_API_URL}/invoices/{invoice_id}", headers=headers, timeout=10)
+        response = requests.get(f"{XROCKET_API_URL}/invoice?invoiceId={invoice_id}", headers=headers, timeout=10)
         res_data = response.json()
         
         status = res_data.get("status")
