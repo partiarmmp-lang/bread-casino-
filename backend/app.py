@@ -11,9 +11,11 @@ from database import init_db, get_total_balance, update_balance, try_deduct_bala
 load_dotenv()
 
 XROCKET_TOKEN = os.getenv("XROCKET_TOKEN", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNzM2MiIsImp0aSI6ImFwcDozMDczNjI6ZDJjN2I2NDYtYzc3OC00ZjA3LWFkNDYtMGZiNDhjZTU3ZDU4IiwiaWF0IjoxNzkzNDY4MjYxfQ.a_Ml3oa5mBXnAMcQZDBS_G9JO-yu_TtUt10hfe3gaKE")
-XROCKET_API_URL = "https://pay.xrocket.tg/api"
 
-# Асинхронный цикл для базы данных (asyncpg)
+# ПРАВИЛЬНЫЙ URL ИЗ ДОКУМЕНТАЦИИ
+XROCKET_API_URL = "https://pay.api.xrocket.exchange/api/v1"
+
+# Асинхронный цикл для базы данных
 _loop = asyncio.new_event_loop()
 asyncio.set_event_loop(_loop)
 
@@ -67,35 +69,42 @@ def api_topup():
     if amount < 0.05: 
         return jsonify({"error": "Минимум 0.05 USDT"}), 400
 
-    # Прямой запрос к API xRocket (без библиотек)
+    # Заголовки с Bearer токеном (согласно документации Pay API)
     headers = {
-        "Rocket-Pay-Key": XROCKET_TOKEN,
+        "Authorization": f"Bearer {XROCKET_TOKEN}",
         "Content-Type": "application/json"
     }
     
+    # Тело запроса по документации (Create invoice)
     payload = {
-        "amount": amount,
+        "amount": str(amount),  # API ждет строку
         "currency": "USDT",
         "description": f"Bread Casino ID: {user_id}",
-        "hiddenMessage": "Спасибо за пополнение!",
-        "commentsEnabled": False
+        "numPayments": 1
     }
 
     try:
-        response = requests.post(f"{XROCKET_API_URL}/createInvoice", json=payload, headers=headers, timeout=10)
-        res_data = response.json()
+        # Правильный эндпоинт для создания инвойса
+        response = requests.post(f"{XROCKET_API_URL}/invoice", json=payload, headers=headers, timeout=15)
+        
+        # Пытаемся распарсить ответ
+        try:
+            res_data = response.json()
+        except:
+            res_data = {"raw_text": response.text}
 
         if response.status_code != 200:
-            return jsonify({"error": f"xRocket вернул ошибку: {res_data}"}), 500
+            return jsonify({"error": f"xRocket вернул ошибку {response.status_code}: {res_data}"}), 500
 
-        # Ищем ссылку в ответе сервера
-        pay_url = res_data.get("data", {}).get("link")
+        # Ищем ссылку в ответе (согласно документации она в поле "url")
+        # Если вдруг структура другая, попробуем найти в разных местах
+        pay_url = res_data.get("url") or res_data.get("data", {}).get("url")
         
         if not pay_url:
             return jsonify({"error": f"xRocket не вернул ссылку. Ответ: {res_data}"}), 500
 
         return jsonify({
-            "invoice_id": res_data.get("data", {}).get("id"),
+            "invoice_id": res_data.get("id"),
             "pay_url": pay_url,
             "amount": amount
         })
@@ -109,18 +118,18 @@ def api_check_payment(invoice_id):
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
 
     headers = {
-        "Rocket-Pay-Key": XROCKET_TOKEN,
+        "Authorization": f"Bearer {XROCKET_TOKEN}",
     }
-    payload = {"invoiceId": invoice_id}
-
+    
     try:
-        response = requests.post(f"{XROCKET_API_URL}/getInvoice", json=payload, headers=headers, timeout=10)
+        # GET запрос для получения информации об инвойсе
+        response = requests.get(f"{XROCKET_API_URL}/invoice?invoiceId={invoice_id}", headers=headers, timeout=10)
         res_data = response.json()
         
-        status = res_data.get("data", {}).get("status")
+        status = res_data.get("status")
         
         if status == "paid":
-            amount = float(res_data.get("data", {}).get("amount"))
+            amount = float(res_data.get("amount", 0))
             run_async(update_balance(user_id, amount))
             run_async(log_tx(user_id, "deposit", amount, f"xrocket_{invoice_id}"))
             return jsonify({"paid": True, "amount": amount})
@@ -148,24 +157,25 @@ def api_withdraw():
     if not run_async(try_deduct_balance(user_id, amount)):
         return jsonify({"error": "Недостаточно средств"}), 400
 
+    # Для вывода используем заголовок как в документации
     headers = {
-        "Rocket-Pay-Key": XROCKET_TOKEN,
+        "Authorization": f"Bearer {XROCKET_TOKEN}",
         "Content-Type": "application/json"
     }
     
     payload = {
-        "user_id": int(target_id),
+        "userId": int(target_id),
         "currency": "USDT",
-        "amount": amount,
+        "amount": str(amount),
         "description": "Withdraw from Bread Casino"
     }
 
     try:
-        response = requests.post(f"{XROCKET_API_URL}/createWithdrawal", json=payload, headers=headers, timeout=10)
+        # Эндпоинт для вывода (уточнен по документации Pay API)
+        response = requests.post(f"{XROCKET_API_URL}/withdrawal", json=payload, headers=headers, timeout=15)
         res_data = response.json()
         
         if response.status_code != 200:
-             # Возвращаем баланс если вывод не удался
             run_async(update_balance(user_id, amount))
             return jsonify({"error": f"xRocket ошибка: {res_data}"}), 500
 
