@@ -217,44 +217,58 @@ def api_lottery_buy():
     real, bonus = run_async(get_balance(user_id)), run_async(get_bonus_balance(user_id))
     return jsonify({"success": True, "winning": winning, "tickets": tickets, "total_win": total_win, "real": real, "bonus": bonus})
 
-# --- КЛИКЕР (СЕРВЕРНАЯ ЛОГИКА) ---
+# --- КЛИКЕР (ЗАЩИЩЕННАЯ ВЕРСИЯ) ---
 async def _get_clicker_data(user_id):
     pool = await asyncpg.create_pool(DB_URL, max_size=2)
     async with pool.acquire() as db:
-        row = await db.fetchrow("SELECT coins, energy, energy_limit, last_energy_reset FROM users WHERE user_id = $1", int(user_id))
-        if not row:
-            await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", int(user_id))
-            return {"coins": 0, "energy": 100, "limit": 100}
+        # Сначала убеждаемся, что юзер есть
+        await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", int(user_id))
         
-        coins = row['coins'] or 0
-        energy = row['energy'] or 0
-        limit = row['energy_limit'] or 100
+        row = await db.fetchrow("SELECT coins, energy, energy_limit, last_energy_reset FROM users WHERE user_id = $1", int(user_id))
+        
+        # Если поля NULL (например, старый юзер), ставим дефолты
+        coins = row['coins'] if row and row['coins'] is not None else 0
+        energy = row['energy'] if row and row['energy'] is not None else 100
+        limit = row['energy_limit'] if row and row['energy_limit'] is not None else 100
         
         now = datetime.datetime.now()
-        last = row['last_energy_reset']
+        last = row['last_energy_reset'] if row else None
+        
         if last:
             delta = (now - last).total_seconds()
-            regen = int(delta / 10) # +1 энергия каждые 10 секунд
+            regen = int(delta / 10) # 1 энергия в 10 сек
             if regen > 0:
                 energy = min(limit, energy + regen)
                 await db.execute("UPDATE users SET energy = $1, last_energy_reset = $2 WHERE user_id = $3", energy, now, int(user_id))
+        else:
+            # Если время сброса не задано, ставим текущее
+            await db.execute("UPDATE users SET last_energy_reset = $1 WHERE user_id = $2", now, int(user_id))
+            
         return {"coins": coins, "energy": energy, "limit": limit}
 
 @app.route("/api/clicker/data")
 def api_clicker_data():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
-    data = run_async(_get_clicker_data(user_id))
-    return jsonify(data)
+    try:
+        data = run_async(_get_clicker_data(user_id))
+        return jsonify(data)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 async def _do_click(user_id):
     pool = await asyncpg.create_pool(DB_URL, max_size=2)
     async with pool.acquire() as db:
         row = await db.fetchrow("SELECT coins, energy FROM users WHERE user_id = $1", int(user_id))
-        if not row or row['energy'] < 1:
+        
+        # Если энергии нет или поле NULL, возвращаем ошибку
+        current_energy = row['energy'] if row and row['energy'] is not None else 0
+        if current_energy < 1:
             return {"error": "Нет энергии"}
-        new_coins = (row['coins'] or 0) + 1
-        new_energy = (row['energy'] or 0) - 1
+            
+        new_coins = (row['coins'] if row and row['coins'] is not None else 0) + 1
+        new_energy = current_energy - 1
+        
         await db.execute("UPDATE users SET coins = $1, energy = $2, last_energy_reset = $3 WHERE user_id = $4", new_coins, new_energy, datetime.datetime.now(), int(user_id))
         return {"coins": new_coins, "energy": new_energy}
 
@@ -262,8 +276,11 @@ async def _do_click(user_id):
 def api_clicker_click():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
-    res = run_async(_do_click(user_id))
-    return jsonify(res)
+    try:
+        res = run_async(_do_click(user_id))
+        return jsonify(res)
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 # --- ПЛАТЕЖИ XROCKET ---
 @app.route("/api/topup", methods=["GET", "POST"])
