@@ -10,10 +10,8 @@ from database import init_db, get_total_balance, update_balance, try_deduct_bala
 
 load_dotenv()
 
-# ВАЖНО: Токен xRocket. Убедись, что он действителен!
 XROCKET_TOKEN = os.getenv("XROCKET_TOKEN", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNzM2MiIsImp0aSI6ImFwcDozMDczNjI6ZDJjN2I2NDYtYzc3OC00ZjA3LWFkNDYtMGZiNDhjZTU3ZDU4IiwiaWF0IjoxNzkzNDY4MjYxfQ.a_Ml3oa5mBXnAMcQZDBS_G9JO-yu_TtUt10hfe3gaKE")
 
-# Запускаем цикл событий в отдельном потоке, чтобы Flask не блокировался
 _loop = asyncio.new_event_loop()
 asyncio.set_event_loop(_loop)
 
@@ -36,7 +34,7 @@ async def _init_rocket():
 run_async(_init_rocket())
 
 app = Flask(__name__)
-CORS(app)  # Разрешаем все CORS запросы для фронтенда
+CORS(app)
 
 try:
     run_async(init_db())
@@ -85,11 +83,12 @@ def api_topup():
     try:
         invoice = run_async(_create_invoice())
         
-        # Ищем ссылку в разных возможных полях ответа xRocket
-        pay_url = getattr(invoice, 'link', None) or getattr(invoice, 'url', None) or getattr(invoice, 'mini_app_invoice_url', None)
+        # В библиотеке aiorocket2 ссылка лежит либо в .link, либо в .url
+        pay_url = getattr(invoice, 'link', None) or getattr(invoice, 'url', None)
         
         if not pay_url:
-            return jsonify({"error": f"Ссылка не найдена в ответе сервера."}), 500
+            # Если ссылки нет, отдаем ошибку, чтобы фронт не открывал about:blank
+            return jsonify({"error": "xRocket не вернул ссылку на оплату"}), 500
 
         return jsonify({
             "invoice_id": invoice.id,
@@ -112,7 +111,6 @@ def api_check_payment(invoice_id):
         inv = run_async(_check())
         if inv.status == "paid":
             amount = float(inv.amount)
-            # Проверяем, не начисляли ли уже (защита от двойного начисления)
             run_async(update_balance(user_id, amount))
             run_async(log_tx(user_id, "deposit", amount, f"xrocket_{invoice_id}"))
             return jsonify({"paid": True, "amount": amount})
