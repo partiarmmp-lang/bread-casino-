@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BREAD CASINO | Clicker</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap');
+        body { background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%); color: white; font-family: 'Montserrat', sans-serif; text-align: center; margin: 0; padding: 0; overflow: hidden; user-select: none; display: flex; flex-direction: column; align-items: center; height: 100vh; }
+        
+        .header { width: 100%; padding: 15px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; background: rgba(0,0,0,0.5); position: absolute; top: 0; z-index: 10; }
+        .back-btn { background: #333; color: white; border: none; padding: 8px 15px; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        
+        .stats-panel { position: absolute; top: 70px; width: 100%; display: flex; justify-content: space-around; }
+        .stat-box { background: rgba(255,204,0,0.1); border: 1px solid #ffcc00; padding: 10px 20px; border-radius: 15px; }
+        .stat-val { font-size: 24px; color: #ffcc00; font-weight: 900; }
+        
+        /* Сама монета */
+        .click-area { flex: 1; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
+        .coin { width: 250px; height: 250px; background: radial-gradient(circle at 30% 30%, #ffe066, #ffb300, #cc8800); border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 120px; cursor: pointer; box-shadow: 0 0 50px rgba(255,204,0,0.4), inset 0 0 20px rgba(0,0,0,0.5); border: 8px solid #b37700; transition: transform 0.1s; }
+        .coin:active { transform: scale(0.95); }
+        
+        /* Всплывающие +1 */
+        .floating-text { position: absolute; color: #fff; font-size: 36px; font-weight: 900; pointer-events: none; animation: floatUp 0.8s ease-out forwards; text-shadow: 0 0 10px #ffcc00; z-index: 100; }
+        @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-100px) scale(1.5); } }
+
+        /* Нижняя панель энергии */
+        .energy-panel { position: absolute; bottom: 0; width: 100%; padding: 20px; background: linear-gradient(0deg, #000 0%, transparent 100%); box-sizing: border-box; }
+        .energy-text { font-size: 18px; color: #fff; margin-bottom: 5px; font-weight: bold; }
+        .progress-bar { width: 80%; height: 15px; background: #333; border-radius: 10px; margin: 0 auto; overflow: hidden; border: 1px solid #555; }
+        .progress-fill { height: 100%; background: linear-gradient(90deg, #00ff00, #ccff00); width: 100%; transition: width 0.3s; box-shadow: 0 0 10px #00ff00; }
+
+        /* Магазин */
+        .shop-btn { position: absolute; right: 20px; bottom: 80px; background: #ffcc00; color: #000; border: none; width: 60px; height: 60px; border-radius: 50%; font-size: 30px; cursor: pointer; box-shadow: 0 5px 15px rgba(255,204,0,0.4); }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <button class="back-btn" onclick="goBack()">⬅️ Назад</button>
+        <div style="font-weight:900; color:#ffcc00;">🪙 КЛИКЕР</div>
+        <div style="width:70px;"></div> <!-- Для симметрии -->
+    </div>
+
+    <div class="stats-panel">
+        <div class="stat-box">
+            <div style="font-size:12px; color:#aaa;">МОНЕТЫ</div>
+            <div class="stat-val" id="coins-display">0</div>
+        </div>
+    </div>
+
+    <div class="click-area" id="clickArea">
+        <div class="coin" id="coin" onclick="handleClick(event)">🪙</div>
+    </div>
+
+    <button class="shop-btn" onclick="alert('Магазин скоро появится!')">🛒</button>
+
+    <div class="energy-panel">
+        <div class="energy-text"><span id="energy-display">100</span> / <span id="limit-display">100</span> ⚡</div>
+        <div class="progress-bar"><div class="progress-fill" id="energy-bar"></div></div>
+    </div>
+
+    <script>
+        const API_URL = 'https://bread-casino-14.onrender.com';
+        let coins = 0;
+        let energy = 100;
+        let limit = 100;
+        let userId = null;
+
+        const tg = window.Telegram.WebApp;
+        tg.ready(); tg.expand();
+        userId = tg.initDataUnsafe?.user?.id || localStorage.getItem('tg_user_id');
+
+        function goBack() { window.location.href = 'index.html'; }
+
+        // Загрузка данных
+        function fetchData() {
+            if (!userId) return;
+            fetch(API_URL + '/api/clicker/data?user_id=' + userId)
+            .then(res => res.json())
+            .then(data => {
+                coins = data.coins;
+                energy = data.energy;
+                limit = data.limit;
+                updateUI();
+            });
+        }
+
+        function updateUI() {
+            document.getElementById('coins-display').innerText = coins;
+            document.getElementById('energy-display').innerText = Math.floor(energy);
+            document.getElementById('limit-display').innerText = limit;
+            
+            let percent = (energy / limit) * 100;
+            document.getElementById('energy-bar').style.width = percent + '%';
+            if (percent < 20) document.getElementById('energy-bar').style.background = '#ff0000';
+            else document.getElementById('energy-bar').style.background = 'linear-gradient(90deg, #00ff00, #ccff00)';
+        }
+
+        // Клик по монете
+        async function handleClick(e) {
+            if (energy < 1) return alert("Энергия закончилась! Ждите восстановления.");
+
+            // Оптимистичный UI (чтобы не ждать сервер)
+            coins++;
+            energy -= 1;
+            updateUI();
+
+            // Анимация +1
+            const float = document.createElement('div');
+            float.className = 'floating-text';
+            float.innerText = '+1';
+            float.style.left = (e.clientX - 20) + 'px';
+            float.style.top = (e.clientY - 50) + 'px';
+            document.body.appendChild(float);
+            setTimeout(() => float.remove(), 800);
+
+            // Отправляем на сервер
+            try {
+                const res = await fetch(API_URL + '/api/clicker/click', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ user_id: userId })
+                });
+                const data = await res.json();
+                if (data.error) { alert(data.error); return; }
+                // Синхронизируем с сервером (если вдруг разошлось)
+                coins = data.coins;
+                energy = data.energy;
+                updateUI();
+            } catch (err) { console.log(err); }
+        }
+
+        // Восстановление энергии (визуальное обновление каждую секунду)
+        setInterval(() => {
+            if (energy < limit) {
+                energy += 0.1; // Визуально капает
+                if (energy > limit) energy = limit;
+                updateUI();
+            }
+        }, 1000);
+
+        fetchData();
+    </script>
+</body>
+</html>
