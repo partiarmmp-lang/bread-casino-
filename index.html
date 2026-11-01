@@ -10,7 +10,10 @@
         .header { display: flex; justify-content: space-between; align-items: center; padding: 15px 20px; background: rgba(0,0,0,0.6); backdrop-filter: blur(10px); position: sticky; top: 0; z-index: 100; border-bottom: 1px solid rgba(255,215,0,0.2); }
         .logo { font-size: 20px; font-weight: 900; color: #ffd700; text-shadow: 0 0 15px rgba(255,215,0,0.6); }
         
-        .balance-box { text-align: right; background: rgba(255,215,0,0.1); border: 1px solid #ffd700; padding: 5px 15px; border-radius: 15px; }
+        /* Контейнер для виджета входа */
+        #auth-container { display: flex; align-items: center; }
+        
+        .balance-box { text-align: right; background: rgba(255,215,0,0.1); border: 1px solid #ffd700; padding: 5px 15px; border-radius: 15px; display: none; }
         .balance-total { font-size: 18px; font-weight: bold; color: #fff; }
         .balance-details { font-size: 11px; color: #aaa; margin-top: 2px; }
         .balance-bonus { color: #ffd700; }
@@ -26,18 +29,15 @@
         .game-icon { font-size: 45px; margin-bottom: 10px; }
         .game-title { font-size: 16px; font-weight: 700; }
 
-        /* Нижнее меню */
         .bottom-nav { position: fixed; bottom: 0; left: 0; width: 100%; background: #0a0a14; display: flex; justify-content: space-around; padding: 12px 0; border-top: 1px solid #333; z-index: 100; padding-bottom: max(12px, env(safe-area-inset-bottom)); }
         .nav-item { display: flex; flex-direction: column; align-items: center; color: #777; text-decoration: none; font-size: 11px; cursor: pointer; transition: 0.2s; }
         .nav-item.active { color: #ffd700; }
         .nav-item i { font-size: 22px; margin-bottom: 4px; }
 
-        /* Модалки */
         #modal, #waitingModal, #profileModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 1000; justify-content: center; align-items: center; }
         .modal-content { background: #1e1e38; padding: 25px; border-radius: 20px; width: 85%; max-width: 350px; text-align: center; border: 1px solid #ffd700; }
         input { width: 100%; padding: 15px; margin: 15px 0; border-radius: 10px; border: none; background: #0a0a14; color: white; font-size: 18px; text-align: center; box-sizing: border-box; }
         .modal-btn { width: 100%; padding: 15px; margin-top: 10px; border: none; border-radius: 10px; background: #00c853; color: white; font-weight: bold; font-size: 16px; cursor: pointer; }
-        
         .ref-link-box { background: #0a0a14; border: 1px dashed #ffd700; padding: 12px; border-radius: 10px; word-break: break-all; font-size: 13px; margin: 15px 0; color: #00c853; }
 
         #loader { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 2000; justify-content: center; align-items: center; flex-direction: column; }
@@ -48,7 +48,18 @@
 <body>
     <div class="header">
         <div class="logo">🍞 BREAD</div>
-        <div class="balance-box">
+        
+        <!-- ВИДЖЕТ ВХОДА ЧЕРЕЗ TELEGRAM -->
+        <div id="auth-container">
+            <script async src="https://telegram.org/js/telegram-widget.js?22" 
+                    data-telegram-login="Poblatoh_bot" 
+                    data-size="medium" 
+                    data-radius="10" 
+                    data-auth-url="https://partiarmmp-lang.github.io/bread-casino-/" 
+                    data-request-access="write"></script>
+        </div>
+        
+        <div class="balance-box" id="balance-box">
             <div class="balance-total"><span id="balance-display">0.00</span> USDT</div>
             <div class="balance-details">Бонус: <span class="balance-bonus" id="bonus-display">0.00</span></div>
         </div>
@@ -65,22 +76,15 @@
         <a href="crash.html" class="game-card"><div class="game-icon">🚀</div><div class="game-title">CRASH</div></a>
         <a href="mines.html" class="game-card"><div class="game-icon">💣</div><div class="game-title">МИНЫ</div></a>
         <a href="lottery.html" class="game-card"><div class="game-icon">🎟️</div><div class="game-title">ЛОТЕРЕЯ</div></a>
-       <a href="clicker.html" class="game-card"><div class="game-icon">🪙</div><div class="game-title">КЛИКЕР</div></a>
-
-    <!-- Нижнее меню -->
-    <div class="bottom-nav">
-        <div class="nav-item active">
-            <i>🏠</i><span>Игры</span>
-        </div>
-        <div class="nav-item" onclick="openProfile()">
-            <i>👤</i><span>Профиль</span>
-        </div>
-        <div class="nav-item" onclick="window.location.reload()">
-            <i>🔄</i><span>Обновить</span>
-        </div>
+        <a href="clicker.html" class="game-card"><div class="game-icon">🪙</div><div class="game-title">КЛИКЕР</div></a>
     </div>
 
-    <!-- Модалки -->
+    <div class="bottom-nav">
+        <div class="nav-item active"><i>🏠</i><span>Игры</span></div>
+        <div class="nav-item" onclick="openProfile()"><i>👤</i><span>Профиль</span></div>
+        <div class="nav-item" onclick="window.location.reload()"><i>🔄</i><span>Обновить</span></div>
+    </div>
+
     <div id="modal">
         <div class="modal-content">
             <h3 id="modal-title">Пополнение</h3>
@@ -141,12 +145,24 @@
         async function initApp() {
             let userId = getUserId();
             const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.has('id') && urlParams.has('hash')) {
+            
+            // 1. Если пришли из Telegram WebApp
+            if (window.Telegram?.WebApp?.initDataUnsafe?.user) {
+                userId = window.Telegram.WebApp.initDataUnsafe.user.id;
+                localStorage.setItem('tg_user_id', userId);
+            }
+            // 2. Если пришли по ссылке от виджета входа (там есть ?id=...)
+            else if (urlParams.has('id')) {
                 localStorage.setItem('tg_user_id', urlParams.get('id'));
                 userId = urlParams.get('id');
                 window.history.replaceState({}, document.title, window.location.pathname);
             }
+            
             if (userId) {
+                // Скрываем виджет, показываем баланс
+                document.getElementById('auth-container').style.display = 'none';
+                document.getElementById('balance-box').style.display = 'block';
+                
                 const refId = urlParams.get('ref_id');
                 try { await apiRequest('/api/register', 'POST', { ref_id: refId }); } catch (e) { console.log("Reg error: ", e); }
                 updateBalanceUI();
@@ -171,9 +187,7 @@
             document.getElementById('profileModal').style.display = 'flex';
         }
         function closeProfile() { document.getElementById('profileModal').style.display = 'none'; }
-        function copyRef() {
-            navigator.clipboard.writeText(document.getElementById('ref-link').innerText).then(() => alert("Ссылка скопирована!"));
-        }
+        function copyRef() { navigator.clipboard.writeText(document.getElementById('ref-link').innerText).then(() => alert("Скопировано!")); }
 
         let actionType = '';
         window.openModal = function(type) {
@@ -194,7 +208,6 @@
                 const newWindow = window.open('about:blank', '_blank');
                 if (newWindow) newWindow.document.write('<h3 style="font-family:sans-serif;padding:40px;text-align:center;color:#000;">Создаем счет...</h3>');
                 showLoader();
-
                 try {
                     const res = await apiRequest('/api/topup', 'GET', { amount: amount });
                     if (res.pay_url) {
@@ -204,26 +217,19 @@
                         else window.location.href = res.pay_url;
                         document.getElementById('waitingModal').style.display = 'flex';
                     } else {
-                        hideLoader();
-                        if (newWindow) newWindow.close();
+                        hideLoader(); if (newWindow) newWindow.close();
                         alert("Сервер не вернул ссылку.");
                     }
                 } catch (e) {
-                    hideLoader();
-                    if (newWindow) newWindow.close();
+                    hideLoader(); if (newWindow) newWindow.close();
                     alert("Ошибка: " + e.message);
                 }
             } else if (actionType === 'withdraw') {
                 showLoader();
                 try {
                     await apiRequest('/api/withdraw', 'POST', { amount: amount });
-                    hideLoader();
-                    alert("Вывод успешен!");
-                    updateBalanceUI();
-                } catch (e) {
-                    hideLoader();
-                    alert("Ошибка: " + e.message);
-                }
+                    hideLoader(); alert("Вывод успешен!"); updateBalanceUI();
+                } catch (e) { hideLoader(); alert("Ошибка: " + e.message); }
             }
         };
         
@@ -233,18 +239,10 @@
             btn.textContent = "Проверяем..."; btn.disabled = true;
             try {
                 const res = await apiRequest('/api/check_payment/' + currentInvoiceId);
-                if (res.paid) {
-                    alert("🎉 Оплата получена! Баланс зачислен.");
-                    closeWaiting();
-                    updateBalanceUI();
-                } else {
-                    alert("Счет еще не оплачен.");
-                }
-            } catch (e) {
-                alert("Ошибка проверки: " + e.message);
-            } finally {
-                btn.textContent = "✅ Я оплатил"; btn.disabled = false;
-            }
+                if (res.paid) { alert("🎉 Оплата получена!"); closeWaiting(); updateBalanceUI(); }
+                else { alert("Счет еще не оплачен."); }
+            } catch (e) { alert("Ошибка: " + e.message); } 
+            finally { btn.textContent = "✅ Я оплатил"; btn.disabled = false; }
         }
 
         window.addEventListener('load', initApp);
