@@ -5,7 +5,6 @@ import threading
 import requests
 import random
 import datetime
-import asyncpg
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
