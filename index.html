@@ -122,22 +122,20 @@
             closeModal();
 
             if (actionType === 'deposit') {
-                // ТРЮК: Открываем пустую вкладку СРАЗУ, пока Safari не заблокировал
-                const newWindow = window.open('', '_blank');
+                const newWindow = window.open('about:blank', '_blank');
+                if (newWindow) {
+                    newWindow.document.write('<h3 style="font-family:sans-serif;padding:40px;text-align:center;color:#000;">Создаем счет...</h3>');
+                }
                 showLoader();
 
                 try {
-                    try { await apiRequest('/api/balance'); } catch (e) { }
-                    
                     const res = await apiRequest('/api/topup', 'GET', { amount: amount });
                     
                     if (res.pay_url) {
                         hideLoader();
                         if (newWindow) {
-                            // Если вкладка открылась, перенаправляем её
                             newWindow.location.href = res.pay_url;
                         } else {
-                            // Если браузер всё равно заблокировал, переходим в текущей
                             window.location.href = res.pay_url;
                         }
                     } else {
@@ -153,7 +151,6 @@
             } else if (actionType === 'withdraw') {
                 showLoader();
                 try {
-                    try { await apiRequest('/api/balance'); } catch (e) {}
                     const res = await apiRequest('/api/withdraw', 'POST', { amount: amount });
                     hideLoader();
                     alert("Вывод успешен!");
