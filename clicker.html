@@ -12,12 +12,12 @@
         .header { width: 100%; padding: 15px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; background: rgba(0,0,0,0.5); position: absolute; top: 0; z-index: 10; }
         .back-btn { background: #333; color: white; border: none; padding: 8px 15px; border-radius: 10px; font-weight: bold; cursor: pointer; }
         
-        .stats-panel { position: absolute; top: 70px; width: 100%; display: flex; justify-content: space-around; }
-        .stat-box { background: rgba(255,204,0,0.1); border: 1px solid #ffcc00; padding: 10px 20px; border-radius: 15px; }
-        .stat-val { font-size: 24px; color: #ffcc00; font-weight: 900; }
+        .stats-panel { position: absolute; top: 70px; width: 100%; display: flex; justify-content: center; }
+        .stat-box { background: rgba(255,204,0,0.1); border: 1px solid #ffcc00; padding: 10px 30px; border-radius: 15px; }
+        .stat-val { font-size: 28px; color: #ffcc00; font-weight: 900; }
         
         /* Сама монета */
-        .click-area { flex: 1; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; }
+        .click-area { flex: 1; display: flex; justify-content: center; align-items: center; width: 100%; height: 100%; margin-top: 50px; }
         .coin { width: 250px; height: 250px; background: radial-gradient(circle at 30% 30%, #ffe066, #ffb300, #cc8800); border-radius: 50%; display: flex; justify-content: center; align-items: center; font-size: 120px; cursor: pointer; box-shadow: 0 0 50px rgba(255,204,0,0.4), inset 0 0 20px rgba(0,0,0,0.5); border: 8px solid #b37700; transition: transform 0.1s; }
         .coin:active { transform: scale(0.95); }
         
@@ -26,13 +26,10 @@
         @keyframes floatUp { 0% { opacity: 1; transform: translateY(0) scale(1); } 100% { opacity: 0; transform: translateY(-100px) scale(1.5); } }
 
         /* Нижняя панель энергии */
-        .energy-panel { position: absolute; bottom: 0; width: 100%; padding: 20px; background: linear-gradient(0deg, #000 0%, transparent 100%); box-sizing: border-box; }
-        .energy-text { font-size: 18px; color: #fff; margin-bottom: 5px; font-weight: bold; }
-        .progress-bar { width: 80%; height: 15px; background: #333; border-radius: 10px; margin: 0 auto; overflow: hidden; border: 1px solid #555; }
+        .energy-panel { position: absolute; bottom: 0; width: 100%; padding: 30px 20px; background: linear-gradient(0deg, #000 0%, transparent 100%); box-sizing: border-box; }
+        .energy-text { font-size: 20px; color: #fff; margin-bottom: 10px; font-weight: bold; }
+        .progress-bar { width: 85%; height: 15px; background: #333; border-radius: 10px; margin: 0 auto; overflow: hidden; border: 1px solid #555; }
         .progress-fill { height: 100%; background: linear-gradient(90deg, #00ff00, #ccff00); width: 100%; transition: width 0.3s; box-shadow: 0 0 10px #00ff00; }
-
-        /* Магазин */
-        .shop-btn { position: absolute; right: 20px; bottom: 80px; background: #ffcc00; color: #000; border: none; width: 60px; height: 60px; border-radius: 50%; font-size: 30px; cursor: pointer; box-shadow: 0 5px 15px rgba(255,204,0,0.4); }
     </style>
 </head>
 <body>
@@ -53,8 +50,6 @@
         <div class="coin" id="coin" onclick="handleClick(event)">🪙</div>
     </div>
 
-    <button class="shop-btn" onclick="alert('Магазин скоро появится!')">🛒</button>
-
     <div class="energy-panel">
         <div class="energy-text"><span id="energy-display">100</span> / <span id="limit-display">100</span> ⚡</div>
         <div class="progress-bar"><div class="progress-fill" id="energy-bar"></div></div>
@@ -67,9 +62,28 @@
         let limit = 100;
         let userId = null;
 
-        const tg = window.Telegram.WebApp;
-        tg.ready(); tg.expand();
-        userId = tg.initDataUnsafe?.user?.id || localStorage.getItem('tg_user_id');
+        // Надежная проверка ID (как на главной странице)
+        function getUserId() {
+            // 1. Из Telegram WebApp
+            const tg = window.Telegram?.WebApp;
+            if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) {
+                return tg.initDataUnsafe.user.id;
+            }
+            // 2. Из ссылки в браузере
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('id')) {
+                return urlParams.get('id');
+            }
+            // 3. Из localStorage (сохраняется при входе на index.html)
+            return localStorage.getItem('tg_user_id') || null;
+        }
+
+        userId = getUserId();
+
+        if (!userId) {
+            alert("Ошибка авторизации! Пожалуйста, зайдите через главную страницу сайта.");
+            window.location.href = 'index.html';
+        }
 
         function goBack() { window.location.href = 'index.html'; }
 
@@ -79,6 +93,7 @@
             fetch(API_URL + '/api/clicker/data?user_id=' + userId)
             .then(res => res.json())
             .then(data => {
+                if (data.error) { alert(data.error); return; }
                 coins = data.coins;
                 energy = data.energy;
                 limit = data.limit;
@@ -117,13 +132,14 @@
 
             // Отправляем на сервер
             try {
-                const res = await fetch(API_URL + '/api/clicker/click', {
+                const res = await fetch(API_URL + '/api/clicker/click?user_id=' + userId, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({ user_id: userId })
+                    body: JSON.stringify({}) // user_id уже в ссылке
                 });
                 const data = await res.json();
-                if (data.error) { alert(data.error); return; }
+                if (data.error) { console.log(data.error); return; }
+                
                 // Синхронизируем с сервером (если вдруг разошлось)
                 coins = data.coins;
                 energy = data.energy;
