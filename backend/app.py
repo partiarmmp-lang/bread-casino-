@@ -10,6 +10,7 @@ from database import init_db, get_total_balance, update_balance, try_deduct_bala
 
 load_dotenv()
 
+# ТОКЕН, КОТОРЫЙ ТЫ ПРИСЛАЛ В ПОСЛЕДНЕМ СООБЩЕНИИ
 XROCKET_TOKEN = os.getenv("XROCKET_TOKEN", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNzM2MiIsImp0aSI6ImFwcDozMDczNjI6ZDJjN2I2NDYtYzc3OC00ZjA3LWFkNDYtMGZiNDhjZTU3ZDU4IiwiaWF0IjoxNzkzNDY4MjYxfQ.a_Ml3oa5mBXnAMcQZDBS_G9JO-yu_TtUt10hfe3gaKE")
 
 XROCKET_API_URL = "https://pay.api.xrocket.exchange/api/v1"
@@ -72,7 +73,7 @@ def api_topup():
         "Content-Type": "application/json"
     }
     
-    # ИСПРАВЛЕННЫЕ ПОЛЯ ПО ДОКУМЕНТАЦИИ xROCKET
+    # ПОЛЯ ИСПРАВЛЕНЫ ПО ДОКУМЕНТАЦИИ
     payload = {
         "priceAmount": str(amount),
         "priceCurrency": "USDT",
@@ -91,7 +92,6 @@ def api_topup():
         if response.status_code not in (200, 201):
             return jsonify({"error": f"xRocket вернул ошибку {response.status_code}: {res_data}"}), 500
 
-        # В ответе ссылка обычно лежит в поле "url"
         pay_url = res_data.get("url") or res_data.get("data", {}).get("url")
         
         if not pay_url:
