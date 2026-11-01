@@ -2,22 +2,18 @@ import asyncio
 import os
 import re
 import threading
-import time
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
-from aiogram.utils.web_app import safe_parse_webapp_init_data
-from aiogram import Bot
-from database import init_db, get_total_balance, update_balance, try_deduct_balance, log_tx
-
 from aiorocket2 import xRocketClient
+from database import init_db, get_total_balance, update_balance, try_deduct_balance, log_tx
 
 load_dotenv()
 
-# ТОКЕН ВСТАВЛЕН ПРЯМО В КОД (ВРЕМЕННО!)
-XROCKET_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNzM2MiIsImp0aSI6ImFwcDozMDczNjI6ZDJjN2I2NDYtYzc3OC00ZjA3LWFkNDYtMGZiNDhjZTU3ZDU4IiwiaWF0IjoxNzkzNDY4MjYxfQ.a_Ml3oa5mBXnAMcQZDBS_G9JO-yu_TtUt10hfe3gaKE"
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+# ВАЖНО: Токен xRocket. Убедись, что он действителен!
+XROCKET_TOKEN = os.getenv("XROCKET_TOKEN", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNzM2MiIsImp0aSI6ImFwcDozMDczNjI6ZDJjN2I2NDYtYzc3OC00ZjA3LWFkNDYtMGZiNDhjZTU3ZDU4IiwiaWF0IjoxNzkzNDY4MjYxfQ.a_Ml3oa5mBXnAMcQZDBS_G9JO-yu_TtUt10hfe3gaKE")
 
+# Запускаем цикл событий в отдельном потоке, чтобы Flask не блокировался
 _loop = asyncio.new_event_loop()
 asyncio.set_event_loop(_loop)
 
@@ -40,52 +36,37 @@ async def _init_rocket():
 run_async(_init_rocket())
 
 app = Flask(__name__)
-CORS(app, resources={r"/api/*": {"origins": "*"}})
+CORS(app)  # Разрешаем все CORS запросы для фронтенда
 
-# Пытаемся инициализировать БД, но не роняем сервер, если не вышло
 try:
     run_async(init_db())
-    print("База данных успешно инициализирована.")
+    print("✅ База данных успешно инициализирована.")
 except Exception as e:
-    print(f"ВНИМАНИЕ: Ошибка подключения к БД: {e}")
-
-bot = Bot(token=BOT_TOKEN)
+    print(f"❌ ОШИБКА БД: {e}")
 
 def get_telegram_user_id():
     user_id_arg = request.args.get("user_id")
     if user_id_arg:
         clean_id = re.sub(r'\D', '', str(user_id_arg))
-        if clean_id:
-            try: return int(clean_id)
-            except ValueError: pass
-
-    user_id_header = request.headers.get("X-User-ID")
-    if user_id_header:
-        clean_id = re.sub(r'\D', '', str(user_id_header))
-        if clean_id:
-            try: return int(clean_id)
-            except ValueError: pass
-            
-    init_data = request.headers.get("X-Telegram-Init-Data")
-    if init_data:
-        try:
-            parsed = safe_parse_webapp_init_data(token=BOT_TOKEN, init_data=init_data)
-            if parsed and parsed.user: return parsed.user.id
-        except Exception: pass
+        if clean_id: return int(clean_id)
     return None
 
 @app.route("/api/balance")
 def api_balance():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
-    return jsonify({"balance": run_async(get_total_balance(user_id))})
+    try:
+        bal = run_async(get_total_balance(user_id))
+        return jsonify({"balance": bal})
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/topup", methods=["GET", "POST"])
 def api_topup():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     
-    data = request.get_json(silent=True) or request.args.to_dict() or request.form.to_dict() or {}
+    data = request.get_json(silent=True) or request.args.to_dict() or {}
     try:
         amount = float(data.get("amount", 1))
     except (ValueError, TypeError):
@@ -98,19 +79,17 @@ def api_topup():
         return await rocket.create_invoice(
             currency="USDT",
             amount=amount,
-            min_payment=0,
-            num_payments=1,
-            description=f"Bread Casino ID: {user_id}",
-            hidden_message="Спасибо за пополнение!"
+            description=f"Bread Casino ID: {user_id}"
         )
 
     try:
         invoice = run_async(_create_invoice())
         
-        pay_url = getattr(invoice, 'link', None) or getattr(invoice, 'url', None)
+        # Ищем ссылку в разных возможных полях ответа xRocket
+        pay_url = getattr(invoice, 'link', None) or getattr(invoice, 'url', None) or getattr(invoice, 'mini_app_invoice_url', None)
         
         if not pay_url:
-            return jsonify({"error": f"Ссылка не найдена. Данные: {str(invoice)[:300]}"}), 500
+            return jsonify({"error": f"Ссылка не найдена в ответе сервера."}), 500
 
         return jsonify({
             "invoice_id": invoice.id,
@@ -118,7 +97,8 @@ def api_topup():
             "amount": amount
         })
     except Exception as e:
-        return jsonify({"error": f"Ошибка xRocket: {str(e)}"}), 500
+        print(f"ОШИБКА xROCKET: {e}")
+        return jsonify({"error": f"Ошибка платежки: {str(e)}"}), 500
 
 @app.route("/api/check_payment/<invoice_id>")
 def api_check_payment(invoice_id):
@@ -131,7 +111,8 @@ def api_check_payment(invoice_id):
     try:
         inv = run_async(_check())
         if inv.status == "paid":
-            amount = float(inv.price_amount)
+            amount = float(inv.amount)
+            # Проверяем, не начисляли ли уже (защита от двойного начисления)
             run_async(update_balance(user_id, amount))
             run_async(log_tx(user_id, "deposit", amount, f"xrocket_{invoice_id}"))
             return jsonify({"paid": True, "amount": amount})
@@ -145,7 +126,7 @@ def api_withdraw():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     
-    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    data = request.get_json(silent=True) or {}
     try:
         amount = float(data.get("amount", 0))
     except (ValueError, TypeError):
@@ -153,11 +134,8 @@ def api_withdraw():
         
     target_id = data.get("xrocket_id")
     
-    if amount < 3.0: 
-        return jsonify({"error": "Минимум 3 USDT"}), 400
-    
-    if not target_id:
-        return jsonify({"error": "Укажите ваш xRocket ID"}), 400
+    if amount < 3.0: return jsonify({"error": "Минимум 3 USDT"}), 400
+    if not target_id: return jsonify({"error": "Укажите ваш xRocket ID"}), 400
         
     if not run_async(try_deduct_balance(user_id, amount)):
         return jsonify({"error": "Недостаточно средств"}), 400
@@ -179,4 +157,5 @@ def api_withdraw():
         return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=False)
+    port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
