@@ -23,10 +23,10 @@ def _uid(user_id):
     except (ValueError, TypeError):
         return abs(hash(str(user_id))) % (10**15)
 
-# Обновленная инициализация БД с новыми колонками
 async def init_db():
     pool = await get_pool()
     async with pool.acquire() as db:
+        # Создаем таблицу, если ее нет
         await db.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id BIGINT PRIMARY KEY,
@@ -37,14 +37,7 @@ async def init_db():
                 referrer_id BIGINT,
                 ref_earnings DOUBLE PRECISION DEFAULT 0.0,
                 total_deposits DOUBLE PRECISION DEFAULT 0.0,
-                first_deposit_done INTEGER DEFAULT 0,
-                lucky_points INTEGER DEFAULT 0,
-                coins INTEGER DEFAULT 0,
-                energy INTEGER DEFAULT 100,
-                energy_limit INTEGER DEFAULT 100,
-                last_energy_reset TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                last_daily_bonus TIMESTAMP DEFAULT NULL,
-                last_wheel_spin TIMESTAMP DEFAULT NULL
+                first_deposit_done INTEGER DEFAULT 0
             )
         """)
         await db.execute("""
@@ -57,8 +50,23 @@ async def init_db():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
+        
+        # Автоматически добавляем новые колонки, если их нет (чтобы не ломать старую БД)
+        columns_to_add = [
+            ("lucky_points", "INTEGER DEFAULT 0"),
+            ("coins", "INTEGER DEFAULT 0"),
+            ("energy", "INTEGER DEFAULT 100"),
+            ("energy_limit", "INTEGER DEFAULT 100"),
+            ("last_energy_reset", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+            ("last_daily_bonus", "TIMESTAMP DEFAULT NULL")
+        ]
+        for col, col_type in columns_to_add:
+            try:
+                await db.execute(f"ALTER TABLE users ADD COLUMN {col} {col_type}")
+            except Exception:
+                pass # Колонка уже существует
 
-# --- БАЛАНСЫ ---
+# --- БАЗОВЫЕ ФУНКЦИИ ---
 async def get_total_balance(user_id) -> float:
     pool = await get_pool()
     async with pool.acquire() as db:
@@ -97,7 +105,7 @@ async def try_deduct_bonus(user_id, amount: float) -> bool:
         res = await db.execute("UPDATE users SET bonus_balance = bonus_balance - $1 WHERE user_id = $2 AND bonus_balance >= $1", amount, _uid(user_id))
         return res == "UPDATE 1"
 
-# --- БОНУСЫ И ВЕЙДЖЕР (x3) ---
+# --- БОНУСЫ ---
 async def add_bonus(user_id, amount: float, wager_multiplier: float = 3.0):
     pool = await get_pool()
     async with pool.acquire() as db:
