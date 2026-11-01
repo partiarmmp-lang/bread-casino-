@@ -121,14 +121,12 @@ def api_play_plinko():
     real, bonus = run_async(get_balance(user_id)), run_async(get_bonus_balance(user_id))
     return jsonify({"success": True, "mult": mult, "win": win_amount, "real": real, "bonus": bonus})
 
-# --- МИНЫ (СЕРВЕРНАЯ ЛОГИКА) ---
-active_mines = {} # Временное хранилище игр в памяти
-
+# --- МИНЫ ---
+active_mines = {}
 def calc_mines_mult(opened, mines):
     if opened == 0: return 1.0
     mult = 1.0
-    for i in range(opened):
-        mult *= (25 - i) / (25 - mines - i)
+    for i in range(opened): mult *= (25 - i) / (25 - mines - i)
     return mult * 0.97
 
 @app.route("/api/mines/start", methods=["POST"])
@@ -142,10 +140,8 @@ def api_mines_start():
 
     if not place_bet(user_id, bet): return jsonify({"error": "Недостаточно средств"}), 400
 
-    # Генерируем бомбы на сервере
     bombs = set(random.sample(range(25), mines))
     active_mines[user_id] = {"bet": bet, "mines": mines, "bombs": bombs, "opened": set()}
-    
     real, bonus = run_async(get_balance(user_id)), run_async(get_bonus_balance(user_id))
     return jsonify({"success": True, "real": real, "bonus": bonus})
 
@@ -154,22 +150,17 @@ def api_mines_open():
     user_id = get_telegram_user_id()
     data = request.get_json(silent=True) or {}
     cell = int(data.get("cell", -1))
-
     game = active_mines.get(user_id)
     if not game: return jsonify({"error": "Игра не найдена"}), 400
-    if cell in game["opened"]: return jsonify({"error": "Уже открыто"}), 400
 
     if cell in game["bombs"]:
-        # Проигрыш
         del active_mines[user_id]
         process_loss_refs(user_id, game["bet"])
         return jsonify({"bomb": True, "success": True})
 
-    # Безопасно
     game["opened"].add(cell)
     mult = calc_mines_mult(len(game["opened"]), game["mines"])
-    win = game["bet"] * mult
-    return jsonify({"bomb": False, "mult": mult, "win": win})
+    return jsonify({"bomb": False, "mult": mult, "win": game["bet"] * mult})
 
 @app.route("/api/mines/cashout", methods=["POST"])
 def api_mines_cashout():
@@ -179,16 +170,14 @@ def api_mines_cashout():
 
     mult = calc_mines_mult(len(game["opened"]), game["mines"])
     win = game["bet"] * mult
-    
     run_async(update_balance(user_id, win))
     run_async(add_wager_progress(user_id, win))
     run_async(log_tx(user_id, "win", win, "mines_cashout"))
     del active_mines[user_id]
-
     real, bonus = run_async(get_balance(user_id)), run_async(get_bonus_balance(user_id))
     return jsonify({"success": True, "win": win, "real": real, "bonus": bonus})
 
-# --- ЛОТЕРЕЯ (СЕРВЕРНАЯ ЛОГИКА) ---
+# --- ЛОТЕРЕЯ ---
 @app.route("/api/lottery/buy", methods=["POST"])
 def api_lottery_buy():
     user_id = get_telegram_user_id()
@@ -199,7 +188,6 @@ def api_lottery_buy():
     cost = 0.5 * count
     if not place_bet(user_id, cost): return jsonify({"error": "Недостаточно средств"}), 400
 
-    # Генерируем выигрышную комбинацию (на сегодня)
     winning = sorted(random.sample(range(1, 26), 5))
     tickets = []
     total_win = 0.0
@@ -207,13 +195,11 @@ def api_lottery_buy():
     for _ in range(count):
         ticket = sorted(random.sample(range(1, 26), 5))
         matches = len(set(ticket) & set(winning))
-        
         mult = 0
         if matches == 5: mult = 10000
         elif matches == 4: mult = 50
         elif matches == 3: mult = 5
         elif matches == 2: mult = 1.5
-        
         win = 0.5 * mult
         total_win += win
         tickets.append({"numbers": ticket, "matches": matches})
@@ -226,13 +212,7 @@ def api_lottery_buy():
         process_loss_refs(user_id, cost)
 
     real, bonus = run_async(get_balance(user_id)), run_async(get_bonus_balance(user_id))
-    return jsonify({
-        "success": True, 
-        "winning": winning, 
-        "tickets": tickets, 
-        "total_win": total_win,
-        "real": real, "bonus": bonus
-    })
+    return jsonify({"success": True, "winning": winning, "tickets": tickets, "total_win": total_win, "real": real, "bonus": bonus})
 
 # --- ПЛАТЕЖИ XROCKET ---
 @app.route("/api/topup", methods=["GET", "POST"])
