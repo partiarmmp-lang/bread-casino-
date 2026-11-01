@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BREAD CASINO | Lottery</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap');
+        body { background: radial-gradient(circle at top, #2a1a3a 0%, #0f0f0f 100%); color: white; font-family: 'Montserrat', sans-serif; text-align: center; margin: 0; padding: 15px; user-select: none; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        
+        .header { width: 100%; max-width: 400px; display: flex; justify-content: space-between; margin-bottom: 20px; }
+        .back-btn { background: #333; color: white; border: none; padding: 8px 15px; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        .balance { font-size: 18px; color: #00ff00; font-weight: 900; }
+
+        .lottery-card { background: rgba(255,255,255,0.05); border: 2px solid #9c27b0; border-radius: 20px; padding: 20px; width: 100%; max-width: 350px; box-sizing: border-box; box-shadow: 0 0 30px rgba(156,39,176,0.3); }
+        .title { color: #e040fb; font-size: 24px; font-weight: 900; margin-bottom: 5px; text-shadow: 0 0 10px #e040fb; }
+        
+        .today-numbers { display: flex; justify-content: center; gap: 5px; margin: 20px 0; }
+        .num-ball { width: 40px; height: 40px; background: linear-gradient(135deg, #e040fb, #9c27b0); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 18px; box-shadow: 0 0 15px rgba(224,64,251,0.5); }
+        
+        .my-tickets { min-height: 100px; margin: 20px 0; }
+        .ticket { background: #1a1a1a; border: 1px solid #444; border-radius: 10px; padding: 10px; margin-bottom: 10px; display: flex; justify-content: center; gap: 10px; }
+        .ticket .num { color: #aaa; font-size: 14px; }
+        .ticket .num.match { color: #00ff00; font-weight: bold; text-shadow: 0 0 5px #00ff00; }
+
+        .buy-btn { background: linear-gradient(180deg, #e040fb 0%, #9c27b0 100%); color: white; border: none; width: 100%; padding: 15px; font-size: 18px; font-weight: 900; border-radius: 12px; cursor: pointer; box-shadow: 0 5px 0 #6a0080; margin-bottom: 10px; }
+        .buy-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #6a0080; }
+        
+        .rules { font-size: 11px; color: #888; text-align: left; margin-top: 20px; }
+        .rules b { color: #e040fb; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <button class="back-btn" onclick="goBack()">⬅️ Назад</button>
+        <div class="balance">💰 <span id="balance-display">0.00</span> USDT</div>
+    </div>
+
+    <div class="lottery-card">
+        <div class="title">🎟️ ЛОТЕРЕЯ</div>
+        <p style="font-size: 12px; color: #aaa; margin-top: 0;">Выигрышная комбинация на сегодня:</p>
+        
+        <div class="today-numbers" id="winningNumbers"></div>
+
+        <div class="my-tickets" id="myTickets">
+            <p style="color:#888; font-size:12px;">Здесь появятся ваши купленные билеты</p>
+        </div>
+
+        <button class="buy-btn" onclick="buyTicket(1)">КУПИТЬ 1 БИЛЕТ (0.5 USDT)</button>
+        <button class="buy-btn" onclick="buyTicket(5)" style="background: linear-gradient(180deg, #ff9800 0%, #e65100 100%); box-shadow: 0 5px 0 #bf360c;">КУПИТЬ 5 БИЛЕТОВ (2.5 USDT)</button>
+
+        <div class="rules">
+            <b>Правила:</b><br>
+            • Выигрывает 5 чисел из 25.<br>
+            • 5 угаданных — <b>x10000</b><br>
+            • 4 угаданных — <b>x50</b><br>
+            • 3 угаданных — <b>x5</b><br>
+            • 2 угаданных — <b>x1.5</b><br>
+            <i>Комбинация фиксируется раз в 24 часа.</i>
+        </div>
+    </div>
+
+    <script>
+        const API_URL = 'https://bread-casino-14.onrender.com';
+        let balance = 0;
+        let userId = null;
+        let winningNumbers = [];
+
+        const tg = window.Telegram.WebApp;
+        tg.ready(); tg.expand();
+        userId = tg.initDataUnsafe?.user?.id || localStorage.getItem('tg_user_id');
+
+        function goBack() { window.location.href = 'index.html'; }
+
+        function getTodayNumbers() {
+            let saved = localStorage.getItem('lottery_today');
+            let savedDate = localStorage.getItem('lottery_date');
+            let today = new Date().toDateString();
+
+            if (saved && savedDate === today) return JSON.parse(saved);
+            else {
+                let nums = [];
+                while(nums.length < 5) {
+                    let r = Math.floor(Math.random() * 25) + 1;
+                    if(!nums.includes(r)) nums.push(r);
+                }
+                nums.sort((a,b) => a-b);
+                localStorage.setItem('lottery_today', JSON.stringify(nums));
+                localStorage.setItem('lottery_date', today);
+                return nums;
+            }
+        }
+
+        function init() {
+            if (!userId) { alert("Войдите через Telegram"); return; }
+            fetchBalance();
+            winningNumbers = getTodayNumbers();
+            renderWinningNumbers();
+        }
+
+        function renderWinningNumbers() {
+            const container = document.getElementById('winningNumbers');
+            container.innerHTML = '';
+            winningNumbers.forEach(n => {
+                let div = document.createElement('div');
+                div.className = 'num-ball';
+                div.innerText = n;
+                container.appendChild(div);
+            });
+        }
+
+        function fetchBalance() {
+            fetch(API_URL + '/api/balance?user_id=' + userId)
+            .then(res => res.json())
+            .then(data => {
+                balance = data.real + data.bonus;
+                document.getElementById('balance-display').innerText = balance.toFixed(2);
+            });
+        }
+
+        async function buyTicket(count) {
+            let cost = 0.5 * count;
+            if (balance < cost) return alert("Недостаточно средств!");
+
+            balance -= cost;
+            document.getElementById('balance-display').innerText = balance.toFixed(2);
+
+            const container = document.getElementById('myTickets');
+            if (container.innerHTML.includes("Здесь появятся")) container.innerHTML = '';
+
+            for (let i = 0; i < count; i++) {
+                let ticketNums = [];
+                while(ticketNums.length < 5) {
+                    let r = Math.floor(Math.random() * 25) + 1;
+                    if(!ticketNums.includes(r)) ticketNums.push(r);
+                }
+                ticketNums.sort((a,b) => a-b);
+
+                let matches = ticketNums.filter(n => winningNumbers.includes(n)).length;
+                let ticketDiv = document.createElement('div');
+                ticketDiv.className = 'ticket';
+                
+                ticketNums.forEach(n => {
+                    let span = document.createElement('span');
+                    span.className = 'num';
+                    span.innerText = n;
+                    if (winningNumbers.includes(n)) span.classList.add('match');
+                    ticketDiv.appendChild(span);
+                });
+
+                container.prepend(ticketDiv);
+
+                let mult = 0;
+                if (matches === 5) mult = 10000;
+                else if (matches === 4) mult = 50;
+                else if (matches === 3) mult = 5;
+                else if (matches === 2) mult = 1.5;
+
+                if (mult > 0) {
+                    let win = 0.5 * mult;
+                    balance += win;
+                    document.getElementById('balance-display').innerText = balance.toFixed(2);
+                    setTimeout(() => alert(`🎉 Совпадений: ${matches}. Вы выиграли ${win} USDT!`), 500);
+                }
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
