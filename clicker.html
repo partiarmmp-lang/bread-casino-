@@ -63,11 +63,14 @@
         }
         userId = getUserId();
 
-        // ЖДЕМ СОХРАНЕНИЯ И ТОЛЬКО ПОТОМ ВЫХОДИМ
-        async function goBack() { 
+        // СИНХРОННАЯ ОТПРАВКА (Ждем сохранения и только потом выходим)
+        function goBack() { 
             if (pendingClicks > 0) {
                 document.getElementById('loader').style.display = 'flex';
-                await sendClicks(); // Ждем, пока сервер запишет
+                const xhr = new XMLHttpRequest();
+                xhr.open("POST", API_URL + '/api/clicker/click?user_id=' + userId, false); // false = ждем ответа!
+                xhr.setRequestHeader("Content-Type", "application/json");
+                xhr.send(JSON.stringify({ count: pendingClicks }));
             }
             window.location.href = 'index.html';
         }
@@ -92,20 +95,6 @@
             document.getElementById('energy-bar').style.width = percent + '%';
         }
 
-        async function sendClicks() {
-            if (pendingClicks <= 0) return;
-            const toSend = pendingClicks;
-            pendingClicks = 0; 
-            try {
-                const res = await fetch(API_URL + '/api/clicker/click?user_id=' + userId, {
-                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ count: toSend }) 
-                });
-                const data = await res.json();
-                if (data.error) return;
-                coins = data.coins; energy = data.energy; updateUI();
-            } catch (err) { pendingClicks += toSend; }
-        }
-
         function handleClick(e) {
             if (energy < 1) return alert("Энергия закончилась!");
             coins++; energy--; pendingClicks++; updateUI();
@@ -116,7 +105,6 @@
             setTimeout(() => float.remove(), 800);
         }
 
-        setInterval(sendClicks, 3000);
         setInterval(() => { if (energy < limit) { energy += 0.1; if (energy > limit) energy = limit; updateUI(); } }, 1000);
 
         function openShop() { document.getElementById('shopModal').style.display = 'flex'; }
@@ -124,18 +112,25 @@
 
         async function buyItem(item, cost) {
             if (coins < cost) return alert("Недостаточно монет!");
-            await sendClicks(); // Синхронизируем перед покупкой
-            if (coins < cost) return alert("Недостаточно монет!");
+            await sendClicks(); // Сохраняем перед покупкой
             try {
                 const res = await fetch(API_URL + '/api/clicker/buy?user_id=' + userId, {
                     method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ item: item })
                 });
                 const data = await res.json();
                 if (data.error) return alert(data.error);
-                alert("Покупка успешна!");
-                fetchData();
+                alert("Покупка успешна!"); fetchData();
             } catch (e) { alert("Ошибка сервера"); }
         }
+
+        async function sendClicks() {
+            if (pendingClicks <= 0) return;
+            const toSend = pendingClicks; pendingClicks = 0; 
+            await fetch(API_URL + '/api/clicker/click?user_id=' + userId, {
+                method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ count: toSend }) 
+            }).then(r => r.json()).then(data => { coins = data.coins; energy = data.energy; updateUI(); }).catch(e => pendingClicks += toSend);
+        }
+
         fetchData();
     </script>
 </body>
