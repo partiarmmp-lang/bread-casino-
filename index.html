@@ -50,7 +50,7 @@
         <div class="logo">🍞 BREAD</div>
         <div class="balance-box">
             <div class="balance-total"><span id="balance-display">0.00</span> USDT</div>
-            <div class="balance-details">Бонус: <span class="balance-bonus" id="bonus-display">0.00</span> | Вейджер: <span id="wager-display">0/0</span></div>
+            <div class="balance-details">Бонус: <span class="balance-bonus" id="bonus-display">0.00</span></div>
         </div>
     </div>
 
@@ -63,8 +63,8 @@
         <a href="plinko.html" class="game-card"><div class="game-icon">🎰</div><div class="game-title">PLINKO</div></a>
         <a href="slots.html" class="game-card"><div class="game-icon">🍒</div><div class="game-title">СЛОТЫ</div></a>
         <a href="crash.html" class="game-card"><div class="game-icon">🚀</div><div class="game-title">CRASH</div></a>
-        <div class="game-card" onclick="alert('Скоро!')"><div class="game-icon">💣</div><div class="game-title">МИНЫ</div></div>
-        <div class="game-card" onclick="alert('Скоро!')"><div class="game-icon">🎟️</div><div class="game-title">ЛОТЕРЕЯ</div></div>
+        <a href="mines.html" class="game-card"><div class="game-icon">💣</div><div class="game-title">МИНЫ</div></a>
+        <a href="lottery.html" class="game-card"><div class="game-icon">🎟️</div><div class="game-title">ЛОТЕРЕЯ</div></a>
         <div class="game-card" onclick="alert('Скоро!')"><div class="game-icon">🪙</div><div class="game-title">КЛИКЕР</div></div>
     </div>
 
@@ -81,7 +81,7 @@
         </div>
     </div>
 
-    <!-- Модалка создания счета -->
+    <!-- Модалки -->
     <div id="modal">
         <div class="modal-content">
             <h3 id="modal-title">Пополнение</h3>
@@ -91,21 +91,17 @@
         </div>
     </div>
 
-    <!-- Модалка профиля -->
     <div id="profileModal">
         <div class="modal-content">
             <h3 style="color:#ffd700; margin-top:0;">👤 Профиль</h3>
             <p>Ваш ID: <span id="user-id-display" style="color:#aaa;">...</span></p>
-            
             <h4 style="color:#ffd700; margin-bottom:5px;">👥 Партнерка</h4>
-            <p style="font-size:12px; color:#aaa; margin-top:0;">Получайте 10% / 3% / 1% от проигрышей друзей!</p>
             <div class="ref-link-box" id="ref-link">Загрузка...</div>
             <button class="modal-btn" onclick="copyRef()" style="background:#0088cc;">Скопировать ссылку</button>
             <button class="modal-btn" onclick="closeProfile()" style="background: #333;">Закрыть</button>
         </div>
     </div>
 
-    <!-- Модалка ожидания оплаты -->
     <div id="waitingModal">
         <div class="modal-content">
             <h3 style="color:#ffd700;">Ожидание оплаты</h3>
@@ -124,56 +120,36 @@
         const API_URL = 'https://bread-casino-14.onrender.com';
         let currentInvoiceId = null;
 
-        function getUserId() {
-            return localStorage.getItem('tg_user_id') || '';
-        }
-
+        function getUserId() { return localStorage.getItem('tg_user_id') || ''; }
         function showLoader() { document.getElementById('loader').style.display = 'flex'; }
         function hideLoader() { document.getElementById('loader').style.display = 'none'; }
 
         async function apiRequest(endpoint, method = 'GET', body = null) {
             let url = API_URL + endpoint;
             const userId = getUserId();
-            
             if (userId) url += (url.includes('?') ? '&' : '?') + 'user_id=' + userId;
             if (method === 'GET' && body) {
                 for (const key in body) url += '&' + key + '=' + encodeURIComponent(body[key]);
             }
-
-            try {
-                const response = await fetch(url, { method: method });
-                const text = await response.text();
-                let data;
-                try { data = JSON.parse(text); } catch (e) { throw new Error("Сервер вернул не JSON"); }
-                if (!response.ok) throw new Error(data.error || "Ошибка сервера");
-                return data;
-            } catch (error) {
-                throw error;
-            }
+            const response = await fetch(url, { method: method });
+            const text = await response.text();
+            let data;
+            try { data = JSON.parse(text); } catch (e) { throw new Error("Сервер вернул не JSON"); }
+            if (!response.ok) throw new Error(data.error || "Ошибка сервера");
+            return data;
         }
 
-        // --- АВТОРИЗАЦИЯ И РЕГИСТРАЦИЯ ---
         async function initApp() {
             let userId = getUserId();
             const urlParams = new URLSearchParams(window.location.search);
-            
-            // Если пришли из Telegram
             if (urlParams.has('id') && urlParams.has('hash')) {
                 localStorage.setItem('tg_user_id', urlParams.get('id'));
                 userId = urlParams.get('id');
                 window.history.replaceState({}, document.title, window.location.pathname);
             }
-            
             if (userId) {
-                // Проверяем реферальный код в ссылке (?ref_id=123)
                 const refId = urlParams.get('ref_id');
-                
-                // Отправляем на сервер регистрацию/привязку реферала
-                try {
-                    await apiRequest('/api/register', 'POST', { ref_id: refId });
-                } catch (e) { console.log("Reg error: ", e); }
-                
-                // Грузим баланс
+                try { await apiRequest('/api/register', 'POST', { ref_id: refId }); } catch (e) { console.log("Reg error: ", e); }
                 updateBalanceUI();
             }
         }
@@ -183,30 +159,23 @@
                 const data = await apiRequest('/api/balance');
                 document.getElementById('balance-display').textContent = parseFloat(data.balance).toFixed(2);
                 document.getElementById('bonus-display').textContent = parseFloat(data.bonus).toFixed(2);
-                // Вейджер мы сюда не тянем, чтобы не усложнять, но можем добавить позже
             } catch (error) {
                 document.getElementById('balance-display').textContent = "Error";
             }
         }
 
-        // --- ПРОФИЛЬ ---
         function openProfile() {
             const userId = getUserId();
             if (!userId) return alert("Войдите через Telegram!");
-            
             document.getElementById('user-id-display').innerText = userId;
-            const botUsername = "Poblatoh_bot"; 
-            document.getElementById('ref-link').innerText = `https://t.me/${botUsername}?start=ref_${userId}`;
-            
+            document.getElementById('ref-link').innerText = `https://t.me/Poblatoh_bot?start=ref_${userId}`;
             document.getElementById('profileModal').style.display = 'flex';
         }
         function closeProfile() { document.getElementById('profileModal').style.display = 'none'; }
         function copyRef() {
-            const link = document.getElementById('ref-link').innerText;
-            navigator.clipboard.writeText(link).then(() => alert("Ссылка скопирована!"));
+            navigator.clipboard.writeText(document.getElementById('ref-link').innerText).then(() => alert("Ссылка скопирована!"));
         }
 
-        // --- ОПЛАТА ---
         let actionType = '';
         window.openModal = function(type) {
             if (!getUserId()) return alert("Пожалуйста, войдите через Telegram!");
@@ -263,7 +232,6 @@
             if (!currentInvoiceId) return;
             const btn = document.getElementById('checkPayBtn');
             btn.textContent = "Проверяем..."; btn.disabled = true;
-            
             try {
                 const res = await apiRequest('/api/check_payment/' + currentInvoiceId);
                 if (res.paid) {
@@ -271,7 +239,7 @@
                     closeWaiting();
                     updateBalanceUI();
                 } else {
-                    alert("Счет еще не оплачен. Попробуйте через минуту.");
+                    alert("Счет еще не оплачен.");
                 }
             } catch (e) {
                 alert("Ошибка проверки: " + e.message);
@@ -280,7 +248,6 @@
             }
         }
 
-        // Запуск
         window.addEventListener('load', initApp);
     </script>
 </body>
