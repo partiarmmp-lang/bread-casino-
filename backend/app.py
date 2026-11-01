@@ -83,11 +83,9 @@ def api_topup():
     try:
         invoice = run_async(_create_invoice())
         
-        # В библиотеке aiorocket2 ссылка лежит либо в .link, либо в .url
         pay_url = getattr(invoice, 'link', None) or getattr(invoice, 'url', None)
         
         if not pay_url:
-            # Если ссылки нет, отдаем ошибку, чтобы фронт не открывал about:blank
             return jsonify({"error": "xRocket не вернул ссылку на оплату"}), 500
 
         return jsonify({
