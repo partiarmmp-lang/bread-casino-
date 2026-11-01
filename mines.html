@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>BREAD CASINO | Mines</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap');
+        body { background: #0f0f0f; color: white; font-family: 'Montserrat', sans-serif; text-align: center; margin: 0; padding: 15px; user-select: none; display: flex; flex-direction: column; align-items: center; min-height: 100vh; overflow-x: hidden; }
+        .header { width: 100%; max-width: 400px; display: flex; justify-content: space-between; margin-bottom: 20px; }
+        .back-btn { background: #333; color: white; border: none; padding: 8px 15px; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        .balance { font-size: 18px; color: #00ff00; font-weight: 900; }
+        
+        .setup-panel { background: #1a1a1a; padding: 20px; border-radius: 15px; border: 2px solid #333; width: 100%; max-width: 350px; margin-bottom: 20px; }
+        .mines-options { display: flex; justify-content: center; gap: 10px; margin: 15px 0; }
+        .mines-options button { background: #222; color: #fff; border: 2px solid #444; padding: 10px 15px; border-radius: 10px; font-weight: bold; cursor: pointer; transition: 0.2s; }
+        .mines-options button.active { background: #ffcc00; color: #000; border-color: #ffcc00; box-shadow: 0 0 15px rgba(255,204,0,0.5); }
+        
+        input { background: #000; color: #ffcc00; border: 1px solid #444; padding: 10px; border-radius: 10px; text-align: center; font-size: 18px; font-weight: bold; width: 100px; margin-bottom: 15px; }
+        .start-btn { background: linear-gradient(180deg, #ffcc00 0%, #ff8800 100%); color: #000; border: none; width: 100%; padding: 15px; font-size: 18px; font-weight: 900; border-radius: 10px; cursor: pointer; box-shadow: 0 5px 0 #aa5500; }
+        .start-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #aa5500; }
+
+        .game-area { display: none; flex-direction: column; align-items: center; width: 100%; max-width: 350px; }
+        .stats { display: flex; justify-content: space-between; width: 100%; background: #1a1a1a; padding: 15px; border-radius: 15px; margin-bottom: 15px; border: 1px solid #333; box-sizing: border-box; }
+        .stat-val { color: #ffcc00; font-size: 20px; font-weight: 900; }
+        
+        .grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; width: 100%; margin-bottom: 20px; }
+        .cell { background: #222; border: 2px solid #333; border-radius: 10px; aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; transition: 0.2s; }
+        .cell:active { transform: scale(0.9); }
+        .cell.safe { background: #003300; border-color: #00ff00; box-shadow: 0 0 10px #00ff00; }
+        .cell.bomb { background: #330000; border-color: #ff0000; box-shadow: 0 0 10px #ff0000; }
+        .cell.disabled { pointer-events: none; opacity: 0.6; }
+        
+        .cashout-btn { background: #00c853; color: white; border: none; width: 100%; padding: 15px; font-size: 18px; font-weight: 900; border-radius: 10px; cursor: pointer; display: none; box-shadow: 0 5px 0 #007700; }
+        .cashout-btn:active { transform: translateY(3px); box-shadow: 0 2px 0 #007700; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <button class="back-btn" onclick="goBack()">⬅️ Назад</button>
+        <div class="balance">💰 <span id="balance-display">0.00</span> USDT</div>
+    </div>
+
+    <div class="setup-panel" id="setupPanel">
+        <h2 style="color:#ffcc00; margin-top:0;">💣 САПЕР</h2>
+        <p style="font-size:12px; color:#aaa;">Выберите количество мин:</p>
+        <div class="mines-options" id="minesOptions">
+            <button onclick="selectMines(2, this)" class="active">2</button>
+            <button onclick="selectMines(3, this)">3</button>
+            <button onclick="selectMines(5, this)">5</button>
+            <button onclick="selectMines(7, this)">7</button>
+        </div>
+        <p style="font-size:12px; color:#aaa;">Ставка (мин. 0.05):</p>
+        <input type="number" id="betAmount" value="0.10" step="0.05" min="0.05">
+        <button class="start-btn" onclick="startGame()">НАЧАТЬ ИГРУ</button>
+    </div>
+
+    <div class="game-area" id="gameArea">
+        <div class="stats">
+            <div>
+                <div style="font-size:10px; color:#aaa;">СТАВКА</div>
+                <div class="stat-val" id="stat-bet">0.10</div>
+            </div>
+            <div>
+                <div style="font-size:10px; color:#aaa;">МНОЖИТЕЛЬ</div>
+                <div class="stat-val" id="stat-mult">x1.00</div>
+            </div>
+            <div>
+                <div style="font-size:10px; color:#aaa;">К ЗАБОРУ</div>
+                <div class="stat-val" id="stat-win" style="color:#00ff00;">0.10</div>
+            </div>
+        </div>
+        
+        <div class="grid" id="grid"></div>
+        
+        <button class="cashout-btn" id="cashoutBtn" onclick="cashout()">ЗАБРАТЬ <span id="cashout-amount">0.00</span> USDT</button>
+    </div>
+
+    <script>
+        const API_URL = 'https://bread-casino-14.onrender.com';
+        let balance = 0;
+        let currentMines = 2;
+        let currentBet = 0.10;
+        
+        let gameActive = false;
+        let openedCells = 0;
+        let totalCells = 25;
+        
+        const tg = window.Telegram.WebApp;
+        tg.ready(); tg.expand();
+        let userId = tg.initDataUnsafe?.user?.id || localStorage.getItem('tg_user_id');
+
+        function goBack() { window.location.href = 'index.html'; }
+
+        function fetchBalance() {
+            if (!userId) return;
+            fetch(API_URL + '/api/balance?user_id=' + userId)
+            .then(res => res.json())
+            .then(data => {
+                balance = data.real + data.bonus;
+                document.getElementById('balance-display').innerText = balance.toFixed(2);
+            });
+        }
+        fetchBalance();
+
+        function selectMines(num, btn) {
+            currentMines = num;
+            document.querySelectorAll('.mines-options button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+        }
+
+        function calcMultiplier(opened, mines) {
+            if (opened === 0) return 1.0;
+            let mult = 1.0;
+            for (let i = 0; i < opened; i++) {
+                mult *= (totalCells - i) / (totalCells - mines - i);
+            }
+            return mult * 0.97;
+        }
+
+        async function startGame() {
+            currentBet = parseFloat(document.getElementById('betAmount').value);
+            if (currentBet < 0.05) return alert("Минимальная ставка 0.05");
+            if (currentBet > balance) return alert("Недостаточно средств!");
+
+            balance -= currentBet;
+            document.getElementById('balance-display').innerText = balance.toFixed(2);
+
+            gameActive = true;
+            openedCells = 0;
+            document.getElementById('setupPanel').style.display = 'none';
+            document.getElementById('gameArea').style.display = 'flex';
+            document.getElementById('stat-bet').innerText = currentBet.toFixed(2);
+            document.getElementById('cashoutBtn').style.display = 'none';
+            updateUI();
+
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '';
+            
+            let bombs = [];
+            while(bombs.length < currentMines) {
+                let r = Math.floor(Math.random() * 25);
+                if(!bombs.includes(r)) bombs.push(r);
+            }
+
+            for (let i = 0; i < 25; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.onclick = () => openCell(cell, i, bombs);
+                grid.appendChild(cell);
+            }
+        }
+
+        function openCell(cell, index, bombs) {
+            if (!gameActive || cell.classList.contains('disabled')) return;
+            cell.classList.add('disabled');
+
+            if (bombs.includes(index)) {
+                cell.innerText = '💥';
+                cell.classList.add('bomb');
+                gameActive = false;
+                
+                const cells = document.querySelectorAll('.cell');
+                cells.forEach((c, i) => {
+                    if (bombs.includes(i)) {
+                        c.innerText = '💣';
+                        c.classList.add('bomb');
+                    }
+                });
+                
+                document.getElementById('cashoutBtn').style.display = 'none';
+                setTimeout(() => {
+                    alert("💥 БУМ! Вы проиграли " + currentBet + " USDT");
+                    resetGame();
+                }, 1000);
+
+            } else {
+                cell.innerText = '💎';
+                cell.classList.add('safe');
+                openedCells++;
+                updateUI();
+            }
+        }
+
+        function updateUI() {
+            let mult = calcMultiplier(openedCells, currentMines);
+            let potentialWin = currentBet * mult;
+            
+            document.getElementById('stat-mult').innerText = 'x' + mult.toFixed(2);
+            document.getElementById('stat-win').innerText = potentialWin.toFixed(2);
+            
+            if (openedCells > 0) {
+                document.getElementById('cashoutBtn').style.display = 'block';
+                document.getElementById('cashout-amount').innerText = potentialWin.toFixed(2);
+            }
+        }
+
+        function cashout() {
+            if (!gameActive || openedCells === 0) return;
+            gameActive = false;
+            
+            let mult = calcMultiplier(openedCells, currentMines);
+            let winAmount = currentBet * mult;
+            
+            balance += winAmount;
+            document.getElementById('balance-display').innerText = balance.toFixed(2);
+            
+            alert(`🎉 Вы забрали ${winAmount.toFixed(2)} USDT!`);
+            resetGame();
+        }
+
+        function resetGame() {
+            document.getElementById('setupPanel').style.display = 'block';
+            document.getElementById('gameArea').style.display = 'none';
+            fetchBalance();
+        }
+    </script>
+</body>
+</html>
