@@ -60,20 +60,41 @@ def api_balance():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ИСПРАВЛЕННЫЙ РЕГИСТР (выдает бонус только 1 раз)
 @app.route("/api/register", methods=["POST"])
 def api_register():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     data = request.get_json(silent=True) or request.args.to_dict() or {}
     ref_id = data.get("ref_id")
+    
+    async def process_reg():
+        pool = await get_pool()
+        async with pool.acquire() as db:
+            row = await db.fetchrow("SELECT user_id, welcome_bonus_given FROM users WHERE user_id = $1", int(user_id))
+            
+            is_new_bonus = False
+            
+            if not row:
+                # Если юзера нет — создаем и сразу выдаем бонус
+                await db.execute("INSERT INTO users (user_id, balance, bonus_balance, wager_required, welcome_bonus_given) VALUES ($1, 0.0, 0.10, 0.30, 1)", int(user_id))
+                is_new_bonus = True
+            else:
+                # Если юзер есть, но бонус не получал (0 или NULL)
+                if not row['welcome_bonus_given']:
+                    await db.execute("UPDATE users SET bonus_balance = bonus_balance + 0.10, wager_required = wager_required + 0.30, welcome_bonus_given = 1 WHERE user_id = $1", int(user_id))
+                    is_new_bonus = True
+                    
+            if ref_id and is_new_bonus:
+                await db.execute("UPDATE users SET referrer_id = $1 WHERE user_id = $2 AND referrer_id IS NULL", int(ref_id), int(user_id))
+                
+            return is_new_bonus
+            
     try:
-        is_new = False
-        if ref_id: is_new = run_async(set_referrer(user_id, ref_id))
-        bal = run_async(get_total_balance(user_id))
-        if bal == 0.0:
-            run_async(add_bonus(user_id, 0.10, 3.0))
+        is_new_bonus = run_async(process_reg())
+        if is_new_bonus:
             run_async(log_tx(user_id, "bonus", 0.10, "welcome"))
-        return jsonify({"ok": True, "is_new": is_new})
+        return jsonify({"ok": True, "is_new": is_new_bonus})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -215,7 +236,7 @@ def api_lottery_buy():
     real, bonus = run_async(get_balance(user_id)), run_async(get_bonus_balance(user_id))
     return jsonify({"success": True, "winning": winning, "tickets": tickets, "total_win": total_win, "real": real, "bonus": bonus})
 
-# --- КЛИКЕР (ПАЧКИ) ---
+# --- КЛИКЕР (ЗАЩИЩЕННАЯ ВЕРСИЯ) ---
 async def _get_clicker_data(user_id):
     pool = await get_pool()
     async with pool.acquire() as db:
@@ -258,9 +279,7 @@ async def _do_clicks(user_id, count):
         if current_energy < 1:
             return {"error": "Нет энергии", "coins": row['coins'] or 0, "energy": current_energy}
             
-        # Сколько реально можем списать (не больше, чем энергии, и не больше, чем просят)
         actual_clicks = min(count, current_energy)
-        
         new_coins = (row['coins'] if row and row['coins'] is not None else 0) + actual_clicks
         new_energy = current_energy - actual_clicks
         
@@ -271,10 +290,8 @@ async def _do_clicks(user_id, count):
 def api_clicker_click():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
-    
     data = request.get_json(silent=True) or {}
-    count = int(data.get("count", 1)) # Принимаем пачку кликов
-    
+    count = int(data.get("count", 1))
     try:
         res = run_async(_do_clicks(user_id, count))
         return jsonify(res)
@@ -285,7 +302,6 @@ def api_clicker_click():
 def api_clicker_buy():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
-    
     data = request.get_json(silent=True) or {}
     item = data.get("item")
     
