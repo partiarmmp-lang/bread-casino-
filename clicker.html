@@ -86,6 +86,7 @@
         let energy = 100;
         let limit = 100;
         let userId = null;
+        let pendingClicks = 0; // Сюда копим клики
 
         function getUserId() {
             const tg = window.Telegram?.WebApp;
@@ -101,7 +102,13 @@
             window.location.href = 'index.html';
         }
 
-        function goBack() { window.location.href = 'index.html'; }
+        // Принудительное сохранение перед выходом
+        function goBack() { 
+            if (pendingClicks > 0) {
+                sendClicks(pendingClicks);
+            }
+            setTimeout(() => { window.location.href = 'index.html'; }, 200);
+        }
 
         function fetchData() {
             if (!userId) return;
@@ -128,27 +135,53 @@
             else document.getElementById('energy-bar').style.background = 'linear-gradient(90deg, #00ff00, #ccff00)';
         }
 
-        async function handleClick(e) {
+        // Функция отправки кликов на сервер
+        async function sendClicks(count) {
+            if (count <= 0) return;
+            pendingClicks -= count; // Сразу убираем из ожидания
+            try {
+                const res = await fetch(API_URL + '/api/clicker/click?user_id=' + userId, {
+                    method: 'POST', 
+                    headers: {'Content-Type': 'application/json'}, 
+                    body: JSON.stringify({ count: count }) // Отправляем пачку
+                });
+                const data = await res.json();
+                if (data.error) {
+                    pendingClicks += count; // Если ошибка, возвращаем
+                    return;
+                }
+                coins = data.coins; energy = data.energy; updateUI();
+            } catch (err) { 
+                pendingClicks += count; // Если сеть упала, возвращаем
+            }
+        }
+
+        function handleClick(e) {
             if (energy < 1) return alert("Энергия закончилась! Ждите восстановления.");
-            coins++; energy--; updateUI();
+            
+            // Мгновенно показываем результат
+            coins++; energy--; pendingClicks++;
+            updateUI();
 
             const float = document.createElement('div');
             float.className = 'floating-text'; float.innerText = '+1';
             float.style.left = (e.clientX - 20) + 'px'; float.style.top = (e.clientY - 50) + 'px';
             document.body.appendChild(float);
             setTimeout(() => float.remove(), 800);
-
-            try {
-                const res = await fetch(API_URL + '/api/clicker/click?user_id=' + userId, {
-                    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({})
-                });
-                const data = await res.json();
-                if (data.error) return;
-                coins = data.coins; energy = data.energy; updateUI();
-            } catch (err) { console.log(err); }
         }
 
-        // --- МАГАЗИН ---
+        // Раз в секунду отправляем накопленные клики на сервер
+        setInterval(() => {
+            if (pendingClicks > 0) {
+                sendClicks(pendingClicks);
+            }
+        }, 1000);
+
+        // Восстановление энергии (визуально)
+        setInterval(() => {
+            if (energy < limit) { energy += 0.1; if (energy > limit) energy = limit; updateUI(); }
+        }, 1000);
+
         function openShop() { document.getElementById('shopModal').style.display = 'flex'; }
         function closeShop() { document.getElementById('shopModal').style.display = 'none'; }
 
@@ -163,13 +196,9 @@
                 if (data.error) return alert(data.error);
                 
                 alert("Покупка успешна! Награда зачислена.");
-                fetchData(); // Обновляем монеты
+                fetchData();
             } catch (e) { alert("Ошибка сервера"); }
         }
-
-        setInterval(() => {
-            if (energy < limit) { energy += 0.1; if (energy > limit) energy = limit; updateUI(); }
-        }, 1000);
 
         fetchData();
     </script>
