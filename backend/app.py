@@ -215,7 +215,7 @@ def api_lottery_buy():
     real, bonus = run_async(get_balance(user_id)), run_async(get_bonus_balance(user_id))
     return jsonify({"success": True, "winning": winning, "tickets": tickets, "total_win": total_win, "real": real, "bonus": bonus})
 
-# --- КЛИКЕР (ЧЕРЕЗ ОБЩИЙ ПУЛ БД) ---
+# --- КЛИКЕР (С ПОДДЕРЖКОЙ ПАЧЕК) ---
 async def _get_clicker_data(user_id):
     pool = await get_pool()
     async with pool.acquire() as db:
@@ -249,15 +249,22 @@ def api_clicker_data():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-async def _do_click(user_id):
+# ОБРАБОТКА ПАЧКИ КЛИКОВ
+async def _do_clicks(user_id, count):
     pool = await get_pool()
     async with pool.acquire() as db:
         row = await db.fetchrow("SELECT coins, energy FROM users WHERE user_id = $1", int(user_id))
         current_energy = row['energy'] if row and row['energy'] is not None else 0
+        
         if current_energy < 1:
-            return {"error": "Нет энергии"}
-        new_coins = (row['coins'] if row and row['coins'] is not None else 0) + 1
-        new_energy = current_energy - 1
+            return {"error": "Нет энергии", "coins": row['coins'] or 0, "energy": current_energy}
+            
+        # Сколько реально можем списать (не больше, чем энергии, и не больше, чем просят)
+        actual_clicks = min(count, current_energy)
+        
+        new_coins = (row['coins'] if row and row['coins'] is not None else 0) + actual_clicks
+        new_energy = current_energy - actual_clicks
+        
         await db.execute("UPDATE users SET coins = $1, energy = $2, last_energy_reset = $3 WHERE user_id = $4", new_coins, new_energy, datetime.datetime.now(), int(user_id))
         return {"coins": new_coins, "energy": new_energy}
 
@@ -265,8 +272,12 @@ async def _do_click(user_id):
 def api_clicker_click():
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
+    
+    data = request.get_json(silent=True) or {}
+    count = int(data.get("count", 1)) # Принимаем пачку кликов
+    
     try:
-        res = run_async(_do_click(user_id))
+        res = run_async(_do_clicks(user_id, count))
         return jsonify(res)
     except Exception as e:
         return jsonify({"error": str(e)}), 500
@@ -375,4 +386,3 @@ def api_withdraw():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
-    app.run(host="0.0.0.0", port=port)
