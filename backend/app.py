@@ -18,7 +18,6 @@ load_dotenv()
 
 XROCKET_TOKEN = os.getenv("XROCKET_TOKEN", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNzM2MiIsImp0aSI6ImFwcDozMDczNjI6ZDJjN2I2NDYtYzc3OC00ZjA3LWFkNDYtMGZiNDhjZTU3ZDU4IiwiaWF0IjoxNzkzNDY4MjYxfQ.a_Ml3oa5mBXnAMcQZDBS_G9JO-yu_TtUt10hfe3gaKE")
 XROCKET_API_URL = "https://pay.api.xrocket.exchange/api/v1"
-DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres.nweygfqvmlwdmdnddxre:Dundel2009!.@aws-1-eu-west-3.pooler.supabase.com:6543/postgres")
 
 _loop = asyncio.new_event_loop()
 asyncio.set_event_loop(_loop)
@@ -61,7 +60,6 @@ def api_balance():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ИСПРАВЛЕННЫЙ РЕГИСТР (выдает бонус только 1 раз)
 @app.route("/api/register", methods=["POST"])
 def api_register():
     user_id = get_telegram_user_id()
@@ -73,9 +71,7 @@ def api_register():
         pool = await get_pool()
         async with pool.acquire() as db:
             row = await db.fetchrow("SELECT user_id, welcome_bonus_given FROM users WHERE user_id = $1", int(user_id))
-            
             is_new_bonus = False
-            
             if not row:
                 await db.execute("INSERT INTO users (user_id, balance, bonus_balance, wager_required, welcome_bonus_given) VALUES ($1, 0.0, 0.10, 0.30, 1)", int(user_id))
                 is_new_bonus = True
@@ -83,10 +79,8 @@ def api_register():
                 if not row['welcome_bonus_given']:
                     await db.execute("UPDATE users SET bonus_balance = bonus_balance + 0.10, wager_required = wager_required + 0.30, welcome_bonus_given = 1 WHERE user_id = $1", int(user_id))
                     is_new_bonus = True
-                    
             if ref_id and is_new_bonus:
                 await db.execute("UPDATE users SET referrer_id = $1 WHERE user_id = $2 AND referrer_id IS NULL", int(ref_id), int(user_id))
-                
             return is_new_bonus
             
     try:
@@ -241,14 +235,11 @@ async def _get_clicker_data(user_id):
     async with pool.acquire() as db:
         await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", int(user_id))
         row = await db.fetchrow("SELECT coins, energy, energy_limit, last_energy_reset FROM users WHERE user_id = $1", int(user_id))
-        
         coins = row['coins'] if row and row['coins'] is not None else 0
         energy = row['energy'] if row and row['energy'] is not None else 100
         limit = row['energy_limit'] if row and row['energy_limit'] is not None else 100
-        
         now = datetime.datetime.now()
         last = row['last_energy_reset'] if row else None
-        
         if last:
             delta = (now - last).total_seconds()
             regen = int(delta / 10)
@@ -274,14 +265,11 @@ async def _do_clicks(user_id, count):
     async with pool.acquire() as db:
         row = await db.fetchrow("SELECT coins, energy FROM users WHERE user_id = $1", int(user_id))
         current_energy = row['energy'] if row and row['energy'] is not None else 0
-        
         if current_energy < 1:
             return {"error": "Нет энергии", "coins": row['coins'] or 0, "energy": current_energy}
-            
         actual_clicks = min(count, current_energy)
         new_coins = (row['coins'] if row and row['coins'] is not None else 0) + actual_clicks
         new_energy = current_energy - actual_clicks
-        
         await db.execute("UPDATE users SET coins = $1, energy = $2, last_energy_reset = $3 WHERE user_id = $4", new_coins, new_energy, datetime.datetime.now(), int(user_id))
         return {"coins": new_coins, "energy": new_energy}
 
@@ -309,7 +297,6 @@ def api_clicker_buy():
         async with pool.acquire() as db:
             row = await db.fetchrow("SELECT coins FROM users WHERE user_id = $1", int(user_id))
             if not row or (row['coins'] or 0) < cost: return False
-            
             if reward_type == "freespin":
                 await db.execute("UPDATE users SET coins = coins - $1, roulette_freespins = roulette_freespins + 1 WHERE user_id = $2", cost, int(user_id))
             elif reward_type == "bonus":
@@ -327,7 +314,6 @@ def api_clicker_buy():
     elif item == "energy":
         if run_async(do_buy(500, "energy")): return jsonify({"success": True})
         else: return jsonify({"error": "Мало монет"}), 400
-
     return jsonify({"error": "Товар не найден"}), 400
 
 # --- ПЛАТЕЖИ XROCKET (ОПЛАТА) ---
@@ -356,20 +342,23 @@ def api_topup():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
+# ИСПРАВЛЕННАЯ ПРОВЕРКА ОПЛАТЫ
 @app.route("/api/check_payment/<invoice_id>")
 def api_check_payment(invoice_id):
     user_id = get_telegram_user_id()
     if not user_id: return jsonify({"error": "Unauthorized"}), 401
     headers = {"Authorization": f"Bearer {XROCKET_TOKEN}"}
     try:
-        response = requests.get(f"{XROCKET_API_URL}/invoices/{invoice_id}", headers=headers, timeout=10)
+        # Используем /invoice (единственное число) и параметр invoiceId
+        response = requests.get(f"{XROCKET_API_URL}/invoice", params={"invoiceId": invoice_id}, headers=headers, timeout=10)
         res_data = response.json()
+        
         if res_data.get("status") == "paid":
             amount = float(res_data.get("priceAmount", 0))
             run_async(update_balance(user_id, amount))
             run_async(log_tx(user_id, "deposit", amount, f"xrocket_{invoice_id}"))
             return jsonify({"paid": True, "amount": amount})
-        return jsonify({"paid": False})
+        return jsonify({"paid": False, "status": res_data.get("status")})
     except Exception as e:
         return jsonify({"paid": False, "error": str(e)}), 500
 
