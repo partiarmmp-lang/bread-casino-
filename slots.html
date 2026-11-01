@@ -7,134 +7,44 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@700;900&display=swap');
-
-        body {
-            background: #0f0f0f;
-            color: #fff;
-            font-family: 'Montserrat', sans-serif;
-            text-align: center;
-            margin: 0;
-            padding: 10px;
-            user-select: none;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
-
-        h1 { font-size: 22px; color: #ffcc00; margin: 0 0 5px 0; text-shadow: 0 0 10px rgba(255, 204, 0, 0.5); }
+        body { background: #0f0f0f; color: #fff; font-family: 'Montserrat', sans-serif; text-align: center; margin: 0; padding: 10px; user-select: none; display: flex; flex-direction: column; align-items: center; min-height: 100vh; overflow-x: hidden; }
+        .header { width: 100%; padding: 15px; display: flex; justify-content: space-between; align-items: center; box-sizing: border-box; background: rgba(0,0,0,0.5); position: absolute; top: 0; z-index: 10; }
+        .back-btn { background: #333; color: white; border: none; padding: 8px 15px; border-radius: 10px; font-weight: bold; cursor: pointer; }
+        h1 { font-size: 22px; color: #ffcc00; margin: 60px 0 5px 0; text-shadow: 0 0 10px rgba(255, 204, 0, 0.5); }
         .balance { font-size: 18px; color: #00ff00; font-weight: 700; margin-bottom: 15px; }
 
-        /* Контейнер автомата */
-        .slot-machine {
-            background: #1a1a1a;
-            border: 3px solid #ffcc00;
-            border-radius: 15px;
-            padding: 10px;
-            width: 100%;
-            max-width: 360px;
-            box-sizing: border-box;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
-        }
+        .slot-machine { background: #1a1a1a; border: 3px solid #ffcc00; border-radius: 15px; padding: 10px; width: 100%; max-width: 360px; box-sizing: border-box; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
+        .reels-grid { display: flex; justify-content: space-between; gap: 4px; }
+        .reel-column { flex: 1; background: #fff; border-radius: 5px; height: 210px; overflow: hidden; position: relative; box-shadow: inset 0 10px 10px -10px rgba(0,0,0,0.8), inset 0 -10px 10px -10px rgba(0,0,0,0.8); }
+        .reel-strip { position: absolute; top: 0; left: 0; width: 100%; display: flex; flex-direction: column; }
+        .symbol { font-size: 35px; height: 70px; display: flex; align-items: center; justify-content: center; }
 
-        /* Сетка барабанов */
-        .reels-grid {
-            display: flex;
-            justify-content: space-between;
-            gap: 4px;
-        }
-
-        .reel-column {
-            flex: 1;
-            background: #fff;
-            border-radius: 5px;
-            height: 210px; /* 3 символа по 70px */
-            overflow: hidden;
-            position: relative;
-            box-shadow: inset 0 10px 10px -10px rgba(0,0,0,0.8), inset 0 -10px 10px -10px rgba(0,0,0,0.8);
-        }
-
-        .reel-strip {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-        }
-
-        .symbol {
-            font-size: 35px;
-            height: 70px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-
-        /* Панель управления */
-        .controls {
-            margin-top: 15px;
-            width: 100%;
-            max-width: 360px;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }
-
-        .row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: #1a1a1a;
-            padding: 10px 15px;
-            border-radius: 10px;
-            border: 1px solid #333;
-        }
-
-        .row button {
-            background: #444; color: #fff; border: none; width: 30px; height: 30px;
-            border-radius: 5px; font-size: 18px; cursor: pointer;
-        }
-
+        .controls { margin-top: 15px; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 10px; }
+        .row { display: flex; justify-content: space-between; align-items: center; background: #1a1a1a; padding: 10px 15px; border-radius: 10px; border: 1px solid #333; }
+        .row button { background: #444; color: #fff; border: none; width: 30px; height: 30px; border-radius: 5px; font-size: 18px; cursor: pointer; }
         .row input { background: transparent; border: none; color: #ffcc00; font-size: 18px; font-weight: bold; width: 60px; text-align: center; }
-
-        .spin-btn {
-            background: linear-gradient(180deg, #ffcc00 0%, #ff8800 100%);
-            color: #000; border: none; padding: 15px; font-size: 20px;
-            font-weight: 900; border-radius: 10px; cursor: pointer;
-            text-transform: uppercase; box-shadow: 0 5px 0 #aa5500;
-            transition: all 0.1s; margin-top: 5px;
-        }
-
+        .spin-btn { background: linear-gradient(180deg, #ffcc00 0%, #ff8800 100%); color: #000; border: none; padding: 15px; font-size: 20px; font-weight: 900; border-radius: 10px; cursor: pointer; text-transform: uppercase; box-shadow: 0 5px 0 #aa5500; transition: all 0.1s; margin-top: 5px; }
         .spin-btn:active { transform: translateY(5px); box-shadow: 0 0 0 #aa5500; }
         .spin-btn:disabled { background: #555; color: #888; box-shadow: 0 5px 0 #333; transform: translateY(5px); }
 
-        /* Всплывающие сообщения */
-        #overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: rgba(0,0,0,0.8); display: none; justify-content: center;
-            align-items: center; z-index: 100; flex-direction: column;
-        }
+        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 100; flex-direction: column; }
         #overlay.show { display: flex; }
-        .win-box {
-            background: #111; border: 3px solid #ffcc00; padding: 30px; border-radius: 20px;
-            text-align: center; animation: pop 0.3s ease-out;
-        }
+        .win-box { background: #111; border: 3px solid #ffcc00; padding: 30px; border-radius: 20px; text-align: center; animation: pop 0.3s ease-out; }
         @keyframes pop { 0% { transform: scale(0.5); } 100% { transform: scale(1); } }
         .win-text { font-size: 32px; color: #00ff00; font-weight: 900; margin-bottom: 10px; }
         .freespin-text { font-size: 24px; color: #ffcc00; font-weight: 900; margin-bottom: 20px; }
     </style>
 </head>
 <body>
+    <div class="header">
+        <button class="back-btn" onclick="goBack()">⬅️ Назад</button>
+    </div>
 
     <h1>🎰 DELUXE SLOTS</h1>
     <div class="balance">Баланс: <span id="balance-val">...</span> USDT</div>
 
     <div class="slot-machine">
-        <div class="reels-grid" id="grid">
-            <!-- Сетка 5 колонок создастся через JS -->
-        </div>
+        <div class="reels-grid" id="grid"></div>
     </div>
 
     <div class="controls">
@@ -155,7 +65,7 @@
             </div>
         </div>
         <div style="color:#aaa; font-size:14px;">Итого ставка: <b id="totalBet" style="color:#ffcc00;">0.01</b> USDT</div>
-        
+        
         <button class="spin-btn" id="spinBtn" onclick="spin()">Крутить</button>
         <div style="font-size: 14px; color: #ffcc00; margin-top: 5px; font-weight:bold;" id="freespinStatus"></div>
     </div>
@@ -168,41 +78,49 @@
     </div>
 
     <script>
-        // ВСТАВЬ СВОЮ ССЫЛКУ НА RENDER (без слэша в конце)
-        const API_URL = "https://bread-casino-3.onrender.com";
-        
+        const API_URL = "https://bread-casino-14.onrender.com";
+        
         const SYMBOLS = ["🍒", "🍋", "🍇", "🔔", "⭐", "💎", "7️⃣"];
         const REELS = 5;
-        const ROWS = 3;
-        const SYMBOLS_PER_REEL = 15; // Запас символов для анимации
-        
+        const SYMBOLS_PER_REEL = 15;
+        
         let balance = 0.00;
         let userId = null;
         let isSpinning = false;
         let freespinsLeft = 0;
-        
         let betLine = 0.01;
         let linesCount = 1;
-        
-        let reelStrips = []; // Сюда сохраним ссылки на ленты барабанов
+        let reelStrips = [];
+
+        // ФИКС ДЛЯ TELEGRAM: получаем ID из WebApp или ссылки
+        function getUserId() {
+            const tg = window.Telegram?.WebApp;
+            if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) return tg.initDataUnsafe.user.id;
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('id')) return urlParams.get('id');
+            return localStorage.getItem('tg_user_id') || null;
+        }
 
         const tg = window.Telegram.WebApp;
-        tg.ready();
-        tg.expand();
+        tg.ready(); tg.expand();
 
-        // --- ИНИЦИАЛИЗАЦИЯ ---
-        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-            userId = tg.initDataUnsafe.user.id;
+        userId = getUserId();
+        if (userId) {
             fetchBalance();
         } else {
             document.getElementById('balance-val').innerText = "Ошибка авторизации";
         }
 
+        function goBack() { 
+            if (window.Telegram && window.Telegram.WebApp) {
+                window.location.href = 'index.html'; 
+            } else {
+                window.location.href = 'index.html';
+            }
+        }
+
         function fetchBalance() {
-            fetch(API_URL + '/api/balance', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: userId })
-            })
+            fetch(API_URL + '/api/balance?user_id=' + userId)
             .then(res => res.json())
             .then(data => {
                 balance = data.balance || 0;
@@ -217,32 +135,25 @@
 
         // --- СОЗДАНИЕ БАРАБАНОВ ---
         const gridContainer = document.getElementById('grid');
-        
         for (let c = 0; c < REELS; c++) {
             const column = document.createElement('div');
             column.className = 'reel-column';
-            
             const strip = document.createElement('div');
             strip.className = 'reel-strip';
             strip.id = 'strip-' + c;
-            
-            // Забиваем ленту символами
             for (let i = 0; i < SYMBOLS_PER_REEL; i++) {
                 const sym = document.createElement('div');
                 sym.className = 'symbol';
                 sym.innerText = SYMBOLS[Math.floor(Math.random() * SYMBOLS.length)];
                 strip.appendChild(sym);
             }
-            
             column.appendChild(strip);
             gridContainer.appendChild(column);
             reelStrips.push(strip);
         }
 
-        // --- УПРАВЛЕНИЕ СТАВКАМИ ---
         function changeBet(type, amount) {
             if (isSpinning || freespinsLeft > 0) return;
-            
             if (type === 'line') {
                 betLine += amount;
                 if (betLine < 0.01) betLine = 0.01;
@@ -253,16 +164,15 @@
                 if (linesCount > 3) linesCount = 3;
                 document.getElementById('linesCount').value = linesCount;
             }
-            
             document.getElementById('totalBet').innerText = (betLine * linesCount).toFixed(2);
         }
 
         // --- ИГРА ---
         function spin() {
             if (isSpinning || !userId) return;
-            
+            
             let totalBet = parseFloat((betLine * linesCount).toFixed(2));
-            
+            
             if (freespinsLeft === 0) {
                 if (balance < totalBet) { alert("Недостаточно средств!"); return; }
                 balance -= totalBet;
@@ -275,14 +185,13 @@
             isSpinning = true;
             document.getElementById('spinBtn').disabled = true;
 
-            fetch(API_URL + '/api/slots', {
+            fetch(API_URL + '/api/slots?user_id=' + userId, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    user_id: userId, 
-                    bet: totalBet, 
+                body: JSON.stringify({ 
+                    bet: totalBet, 
                     bet_line: betLine,
                     lines: linesCount,
-                    is_freespin: (freespinsLeft > 0 || document.getElementById('spinBtn').innerText.includes('Бесплатно')) 
+                    is_freespin: (freespinsLeft > 0 || document.getElementById('spinBtn').innerText.includes('Бесплатно')) 
                 })
             })
             .then(res => res.json())
@@ -294,20 +203,17 @@
                     return;
                 }
 
-                const resultGrid = data.grid; // 3x5
-                
-                // Анимация для каждого барабана (по очереди)
+                const resultGrid = data.grid; 
+                
                 for (let c = 0; c < REELS; c++) {
-                    // Берем центральный ряд (1) для остановки
-                    let targetSym = resultGrid[1][c]; 
+                    let targetSym = resultGrid[1][c]; 
                     animateReel(reelStrips[c], targetSym, 1000 + (c * 300));
                 }
 
-                // Ждем, пока крутится последний барабан
                 setTimeout(() => {
                     balance = data.balance;
                     updateBalanceUI();
-                    
+                    
                     if (data.freespins_won > 0) {
                         freespinsLeft += data.freespins_won;
                         updateFreespinUI();
@@ -319,13 +225,12 @@
                     } else {
                         playSound('lose');
                     }
-                    
                     isSpinning = false;
                     document.getElementById('spinBtn').disabled = false;
-                }, 2600); 
+                }, 2600); 
             })
             .catch(err => {
-                alert("Ошибка сервера");
+                alert("Ошибка сети. Проверьте соединение.");
                 isSpinning = false;
                 document.getElementById('spinBtn').disabled = false;
             });
@@ -334,109 +239,75 @@
         function animateReel(strip, targetSym, duration) {
             const children = strip.children;
             let targetIdx = 0;
-            
             for (let i = 0; i < children.length; i++) {
                 if (children[i].innerText === targetSym) {
                     targetIdx = i;
-                    // Чтобы анимация не была мгновенной, берем не первый попавшийся, а чуть дальше
-                    if(i > 5) break; 
+                    if(i > 5) break; 
                 }
             }
-
-            // Высота одного символа
-            const h = 70; 
-            
-            // Сдвигаем так, чтобы targetSym оказался в ЦЕНТРЕ (индекс 1)
-            // Нам нужно, чтобы targetIdx был вторым в окне.
-            // Значит сдвиг = -(targetIdx - 1) * 70
+            const h = 70; 
             const finalY = -(targetIdx - 1) * h;
-
             strip.style.transition = 'none';
             strip.style.transform = `translateY(0px)`;
             void strip.offsetWidth;
-            
             strip.style.transition = `transform ${duration}ms cubic-bezier(0.1, 0.7, 0.1, 1)`;
             strip.style.transform = `translateY(${finalY}px)`;
         }
 
-        // --- UI ФРИСПИНОВ ---
         function updateFreespinUI() {
             const status = document.getElementById('freespinStatus');
             if (freespinsLeft > 0) {
                 status.innerText = `🔥 ФРИСПИНЫ: ${freespinsLeft} (x2)`;
-                document.getElementById('spinBtn').innerText = "Крутить (Бесплатно)";
+                document.getElementById('spinBtn').innerText = 'КРУТИТЬ БЕСПЛАТНО';
+                document.getElementById('spinBtn').style.background = '#00c853';
+                document.getElementById('spinBtn').style.boxShadow = '0 5px 0 #007700';
             } else {
-                status.innerText = "";
-                document.getElementById('spinBtn').innerText = "Крутить";
+                status.innerText = '';
+                document.getElementById('spinBtn').innerText = 'КРУТИТЬ';
+                document.getElementById('spinBtn').style.background = 'linear-gradient(180deg, #ffcc00 0%, #ff8800 100%)';
+                document.getElementById('spinBtn').style.boxShadow = '0 5px 0 #aa5500';
             }
         }
 
-        function showOverlay(win, freespins) {
-            if (win > 0) {
-                document.getElementById('winAmount').innerText = `+${win.toFixed(2)} USDT`;
-                document.getElementById('winAmount').style.display = 'block';
+        function showOverlay(winAmount, freespinsWon) {
+            const overlay = document.getElementById('overlay');
+            const winText = document.getElementById('winAmount');
+            const freeText = document.getElementById('winFree');
+
+            if (freespinsWon > 0) {
+                winText.innerText = `+${winAmount.toFixed(2)} USDT`;
+                freeText.style.display = 'block';
+                freeText.innerText = `+${freespinsWon} ФРИСПИНОВ!`;
             } else {
-                document.getElementById('winAmount').style.display = 'none';
+                winText.innerText = `+${winAmount.toFixed(2)} USDT`;
+                freeText.style.display = 'none';
             }
-            
-            if (freespins > 0) {
-                document.getElementById('winFree').innerText = `⭐ +${freespins} ФРИСПИНОВ! ⭐`;
-                document.getElementById('winFree').style.display = 'block';
-            } else {
-                document.getElementById('winFree').style.display = 'none';
-            }
-            
-            document.getElementById('overlay').classList.add('show');
+            overlay.classList.add('show');
         }
 
         function closeOverlay() {
             document.getElementById('overlay').classList.remove('show');
         }
 
-        // --- ЗВУКИ ---
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioContext();
-
         function playSound(type) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
             const osc = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-
+            osc.connect(gain); gain.connect(audioCtx.destination);
             if (type === 'win') {
-                osc.type = 'triangle';
-                osc.frequency.setValueAtTime(400, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(800, audioCtx.currentTime + 0.1);
-                osc.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.2);
-                gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
+                osc.type = 'triangle'; osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
                 osc.start(); osc.stop(audioCtx.currentTime + 0.5);
-            } else if (type === 'lose') {
-                osc.type = 'sawtooth';
-                osc.frequency.setValueAtTime(200, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.3);
-                gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+            } else {
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, audioCtx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.3);
+                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
                 gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
                 osc.start(); osc.stop(audioCtx.currentTime + 0.3);
-            }
-        }
-    </script>
-    <!-- Кнопка возврата в бота -->
-    <div style="text-align: center; margin-top: 20px; padding-bottom: 20px;">
-        <button onclick="goBackToBot()" style="background: #0088cc; color: white; border: none; padding: 12px 24px; border-radius: 10px; font-size: 16px; font-weight: bold; cursor: pointer;">
-            🤖 Вернуться в бот
-        </button>
-    </div>
-
-    <script>
-        function goBackToBot() {
-            // Закрываем Mini App (если открыто в Telegram)
-            if (window.Telegram && window.Telegram.WebApp) {
-                window.Telegram.WebApp.close();
-            } else {
-                // Если открыто в браузере, просто переходим в бота
-                window.location.href = "https://t.me/Poblatoh_bot";
             }
         }
     </script>
