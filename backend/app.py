@@ -4,6 +4,8 @@ import re
 import threading
 import requests
 import random
+import datetime
+import asyncpg
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from dotenv import load_dotenv
@@ -17,6 +19,7 @@ load_dotenv()
 
 XROCKET_TOKEN = os.getenv("XROCKET_TOKEN", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNzM2MiIsImp0aSI6ImFwcDozMDczNjI6ZDJjN2I2NDYtYzc3OC00ZjA3LWFkNDYtMGZiNDhjZTU3ZDU4IiwiaWF0IjoxNzkzNDY4MjYxfQ.a_Ml3oa5mBXnAMcQZDBS_G9JO-yu_TtUt10hfe3gaKE")
 XROCKET_API_URL = "https://pay.api.xrocket.exchange/api/v1"
+DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres.nweygfqvmlwdmdnddxre:Dundel2009!.@aws-1-eu-west-3.pooler.supabase.com:6543/postgres")
 
 _loop = asyncio.new_event_loop()
 asyncio.set_event_loop(_loop)
@@ -213,6 +216,54 @@ def api_lottery_buy():
 
     real, bonus = run_async(get_balance(user_id)), run_async(get_bonus_balance(user_id))
     return jsonify({"success": True, "winning": winning, "tickets": tickets, "total_win": total_win, "real": real, "bonus": bonus})
+
+# --- КЛИКЕР (СЕРВЕРНАЯ ЛОГИКА) ---
+async def _get_clicker_data(user_id):
+    pool = await asyncpg.create_pool(DB_URL, max_size=2)
+    async with pool.acquire() as db:
+        row = await db.fetchrow("SELECT coins, energy, energy_limit, last_energy_reset FROM users WHERE user_id = $1", int(user_id))
+        if not row:
+            await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", int(user_id))
+            return {"coins": 0, "energy": 100, "limit": 100}
+        
+        coins = row['coins'] or 0
+        energy = row['energy'] or 0
+        limit = row['energy_limit'] or 100
+        
+        now = datetime.datetime.now()
+        last = row['last_energy_reset']
+        if last:
+            delta = (now - last).total_seconds()
+            regen = int(delta / 10) # +1 энергия каждые 10 секунд
+            if regen > 0:
+                energy = min(limit, energy + regen)
+                await db.execute("UPDATE users SET energy = $1, last_energy_reset = $2 WHERE user_id = $3", energy, now, int(user_id))
+        return {"coins": coins, "energy": energy, "limit": limit}
+
+@app.route("/api/clicker/data")
+def api_clicker_data():
+    user_id = get_telegram_user_id()
+    if not user_id: return jsonify({"error": "Unauthorized"}), 401
+    data = run_async(_get_clicker_data(user_id))
+    return jsonify(data)
+
+async def _do_click(user_id):
+    pool = await asyncpg.create_pool(DB_URL, max_size=2)
+    async with pool.acquire() as db:
+        row = await db.fetchrow("SELECT coins, energy FROM users WHERE user_id = $1", int(user_id))
+        if not row or row['energy'] < 1:
+            return {"error": "Нет энергии"}
+        new_coins = (row['coins'] or 0) + 1
+        new_energy = (row['energy'] or 0) - 1
+        await db.execute("UPDATE users SET coins = $1, energy = $2, last_energy_reset = $3 WHERE user_id = $4", new_coins, new_energy, datetime.datetime.now(), int(user_id))
+        return {"coins": new_coins, "energy": new_energy}
+
+@app.route("/api/clicker/click", methods=["POST"])
+def api_clicker_click():
+    user_id = get_telegram_user_id()
+    if not user_id: return jsonify({"error": "Unauthorized"}), 401
+    res = run_async(_do_click(user_id))
+    return jsonify(res)
 
 # --- ПЛАТЕЖИ XROCKET ---
 @app.route("/api/topup", methods=["GET", "POST"])
