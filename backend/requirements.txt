@@ -1,7 +1,6 @@
 flask
 flask-cors
 asyncpg
-aiorocket2
-aiogram
+requests
 python-dotenv
 gunicorn
