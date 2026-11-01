@@ -12,7 +12,6 @@ load_dotenv()
 
 XROCKET_TOKEN = os.getenv("XROCKET_TOKEN", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNzM2MiIsImp0aSI6ImFwcDozMDczNjI6ZDJjN2I2NDYtYzc3OC00ZjA3LWFkNDYtMGZiNDhjZTU3ZDU4IiwiaWF0IjoxNzkzNDY4MjYxfQ.a_Ml3oa5mBXnAMcQZDBS_G9JO-yu_TtUt10hfe3gaKE")
 
-# ПРАВИЛЬНЫЙ URL ИЗ ДОКУМЕНТАЦИИ (с буквой S на конце)
 XROCKET_API_URL = "https://pay.api.xrocket.exchange/api/v1"
 
 _loop = asyncio.new_event_loop()
@@ -73,16 +72,15 @@ def api_topup():
         "Content-Type": "application/json"
     }
     
-    # По документации xRocket сумма должна быть строкой
+    # ИСПРАВЛЕННЫЕ ПОЛЯ ПО ДОКУМЕНТАЦИИ xROCKET
     payload = {
-        "amount": str(amount),
-        "currency": "USDT",
+        "priceAmount": str(amount),
+        "priceCurrency": "USDT",
         "description": f"Bread Casino ID: {user_id}",
         "numPayments": 1
     }
 
     try:
-        # ПРАВИЛЬНЫЙ ЭНДПОИНТ: /invoices (с S)
         response = requests.post(f"{XROCKET_API_URL}/invoices", json=payload, headers=headers, timeout=15)
         
         try:
@@ -93,7 +91,7 @@ def api_topup():
         if response.status_code not in (200, 201):
             return jsonify({"error": f"xRocket вернул ошибку {response.status_code}: {res_data}"}), 500
 
-        # Ищем ссылку в ответе (согласно документации она в поле "url")
+        # В ответе ссылка обычно лежит в поле "url"
         pay_url = res_data.get("url") or res_data.get("data", {}).get("url")
         
         if not pay_url:
@@ -116,14 +114,13 @@ def api_check_payment(invoice_id):
     headers = {"Authorization": f"Bearer {XROCKET_TOKEN}"}
     
     try:
-        # Для проверки инвойса тоже используем множественное число
         response = requests.get(f"{XROCKET_API_URL}/invoices/{invoice_id}", headers=headers, timeout=10)
         res_data = response.json()
         
         status = res_data.get("status")
         
         if status == "paid":
-            amount = float(res_data.get("amount", 0))
+            amount = float(res_data.get("priceAmount", 0))
             run_async(update_balance(user_id, amount))
             run_async(log_tx(user_id, "deposit", amount, f"xrocket_{invoice_id}"))
             return jsonify({"paid": True, "amount": amount})
@@ -156,7 +153,6 @@ def api_withdraw():
         "Content-Type": "application/json"
     }
     
-    # Для вывода используем /payouts (согласно документации)
     payload = {
         "userId": int(target_id),
         "currency": "USDT",
