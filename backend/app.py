@@ -215,7 +215,7 @@ def api_lottery_buy():
     real, bonus = run_async(get_balance(user_id)), run_async(get_bonus_balance(user_id))
     return jsonify({"success": True, "winning": winning, "tickets": tickets, "total_win": total_win, "real": real, "bonus": bonus})
 
-# --- КЛИКЕР (С ПОДДЕРЖКОЙ ПАЧЕК) ---
+# --- КЛИКЕР (ПАЧКИ) ---
 async def _get_clicker_data(user_id):
     pool = await get_pool()
     async with pool.acquire() as db:
@@ -249,7 +249,6 @@ def api_clicker_data():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# ОБРАБОТКА ПАЧКИ КЛИКОВ
 async def _do_clicks(user_id, count):
     pool = await get_pool()
     async with pool.acquire() as db:
@@ -386,3 +385,4 @@ def api_withdraw():
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 8000))
+    app.run(host="0.0.0.0", port=port)
