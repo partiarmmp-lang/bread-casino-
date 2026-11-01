@@ -320,9 +320,7 @@ def lang_menu():
 def main_menu(lang="ru"):
     if lang == "en":
         return InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🎰 Play Plinko (Ball)", web_app=WebAppInfo(url="https://partiarmmp-lang.github.io/bread-casino-/"))],
-            [InlineKeyboardButton(text="🚀 Play Crash (Rocket)", web_app=WebAppInfo(url="https://partiarmmp-lang.github.io/bread-casino-/crash.html"))],
-            [InlineKeyboardButton(text="🔥 DELUXE SLOTS (Exclusive)", web_app=WebAppInfo(url="https://partiarmmp-lang.github.io/bread-casino-/slots.html"))],
+            [InlineKeyboardButton(text="🌐 Open Casino Website", web_app=WebAppInfo(url="https://partiarmmp-lang.github.io/bread-casino-/site.html"))],
             [InlineKeyboardButton(text="🎰 Roulette", callback_data="game_roulette"),
              InlineKeyboardButton(text="🎲 Slots", callback_data="game_slots")],
             [InlineKeyboardButton(text="💣 Mines", callback_data="game_mines"),
@@ -354,9 +352,7 @@ def main_menu(lang="ru"):
              InlineKeyboardButton(text="💸 Withdraw", callback_data="withdraw")],
         ])
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🎰 Играть в Plinko (Шарик)", web_app=WebAppInfo(url="https://partiarmmp-lang.github.io/bread-casino-/"))],
-        [InlineKeyboardButton(text="🚀 Играть в Crash (Ракетка)", web_app=WebAppInfo(url="https://partiarmmp-lang.github.io/bread-casino-/crash.html"))],
-                [InlineKeyboardButton(text="🔥 DELUXE SLOTS (Эксклюзив)", web_app=WebAppInfo(url="https://partiarmmp-lang.github.io/bread-casino-/slots.html"))],
+        [InlineKeyboardButton(text="🌐 Открыть сайт казино", web_app=WebAppInfo(url="https://partiarmmp-lang.github.io/bread-casino-/site.html"))],
         [InlineKeyboardButton(text="🎰 Рулетка", callback_data="game_roulette"),
          InlineKeyboardButton(text="🎲 Слоты", callback_data="game_slots")],
         [InlineKeyboardButton(text="💣 Мины", callback_data="game_mines"),
