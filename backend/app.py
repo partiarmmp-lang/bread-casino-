@@ -89,12 +89,9 @@ def api_topup():
         if response.status_code not in (200, 201):
             return jsonify({"error": f"xRocket вернул ошибку {response.status_code}: {res_data}"}), 500
 
-        # Извлекаем ВСЕ возможные ссылки из ответа
         links = res_data.get("links", {})
         web_link = links.get("webLink") or res_data.get("url")
         tg_link = links.get("telegramBotLink") or links.get("telegramMiniAppLink")
-        
-        # Если webLink нет, но есть tg_link — используем его
         pay_url = web_link or tg_link
         
         if not pay_url:
@@ -103,7 +100,6 @@ def api_topup():
         return jsonify({
             "invoice_id": res_data.get("id"),
             "pay_url": pay_url,
-            "telegram_link": tg_link,
             "amount": amount
         })
     except Exception as e:
@@ -118,13 +114,16 @@ def api_check_payment(invoice_id):
     headers = {"Authorization": f"Bearer {XROCKET_TOKEN}"}
     
     try:
-        response = requests.get(f"{XROCKET_API_URL}/invoice?invoiceId={invoice_id}", headers=headers, timeout=10)
+        response = requests.get(f"{XROCKET_API_URL}/invoices/{invoice_id}", headers=headers, timeout=10)
         res_data = response.json()
         
+        # В xRocket статус оплаты обычно лежит в поле status
         status = res_data.get("status")
         
         if status == "paid":
+            # Берем сумму, которую мы запрашивали
             amount = float(res_data.get("priceAmount", 0))
+            # Начисляем баланс
             run_async(update_balance(user_id, amount))
             run_async(log_tx(user_id, "deposit", amount, f"xrocket_{invoice_id}"))
             return jsonify({"paid": True, "amount": amount})
