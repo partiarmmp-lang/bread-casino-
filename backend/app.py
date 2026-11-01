@@ -12,14 +12,13 @@ from dotenv import load_dotenv
 from database import (
     init_db, get_total_balance, get_balance, get_bonus_balance, update_balance, 
     try_deduct_balance, try_deduct_bonus, add_bonus, add_wager_progress,
-    log_tx, set_referrer, get_referrers_chain, add_ref_earning
+    log_tx, set_referrer, get_referrers_chain, add_ref_earning, get_pool
 )
 
 load_dotenv()
 
 XROCKET_TOKEN = os.getenv("XROCKET_TOKEN", "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJhcHBJZCI6IjMwNzM2MiIsImp0aSI6ImFwcDozMDczNjI6ZDJjN2I2NDYtYzc3OC00ZjA3LWFkNDYtMGZiNDhjZTU3ZDU4IiwiaWF0IjoxNzkzNDY4MjYxfQ.a_Ml3oa5mBXnAMcQZDBS_G9JO-yu_TtUt10hfe3gaKE")
 XROCKET_API_URL = "https://pay.api.xrocket.exchange/api/v1"
-DB_URL = os.getenv("DATABASE_URL", "postgresql://postgres.nweygfqvmlwdmdnddxre:Dundel2009!.@aws-1-eu-west-3.pooler.supabase.com:6543/postgres")
 
 _loop = asyncio.new_event_loop()
 asyncio.set_event_loop(_loop)
@@ -217,9 +216,9 @@ def api_lottery_buy():
     real, bonus = run_async(get_balance(user_id)), run_async(get_bonus_balance(user_id))
     return jsonify({"success": True, "winning": winning, "tickets": tickets, "total_win": total_win, "real": real, "bonus": bonus})
 
-# --- КЛИКЕР ---
+# --- КЛИКЕР (ЧЕРЕЗ ОБЩИЙ ПУЛ БД) ---
 async def _get_clicker_data(user_id):
-    pool = await asyncpg.create_pool(DB_URL, max_size=2)
+    pool = await get_pool()
     async with pool.acquire() as db:
         await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", int(user_id))
         row = await db.fetchrow("SELECT coins, energy, energy_limit, last_energy_reset FROM users WHERE user_id = $1", int(user_id))
@@ -252,7 +251,7 @@ def api_clicker_data():
         return jsonify({"error": str(e)}), 500
 
 async def _do_click(user_id):
-    pool = await asyncpg.create_pool(DB_URL, max_size=2)
+    pool = await get_pool()
     async with pool.acquire() as db:
         row = await db.fetchrow("SELECT coins, energy FROM users WHERE user_id = $1", int(user_id))
         current_energy = row['energy'] if row and row['energy'] is not None else 0
@@ -273,7 +272,6 @@ def api_clicker_click():
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
-# МАГАЗИН КЛИКЕРА
 @app.route("/api/clicker/buy", methods=["POST"])
 def api_clicker_buy():
     user_id = get_telegram_user_id()
@@ -282,46 +280,33 @@ def api_clicker_buy():
     data = request.get_json(silent=True) or {}
     item = data.get("item")
     
-    # Цены и награды
-    if item == "freespin":
-        cost = 100
-        async def do_buy():
-            pool = await asyncpg.create_pool(DB_URL, max_size=2)
-            async with pool.acquire() as db:
-                row = await db.fetchrow("SELECT coins FROM users WHERE user_id = $1", int(user_id))
-                if not row or (row['coins'] or 0) < cost: return False
+    async def do_buy(cost, reward_type):
+        pool = await get_pool()
+        async with pool.acquire() as db:
+            row = await db.fetchrow("SELECT coins FROM users WHERE user_id = $1", int(user_id))
+            if not row or (row['coins'] or 0) < cost: return False
+            
+            if reward_type == "freespin":
                 await db.execute("UPDATE users SET coins = coins - $1, roulette_freespins = roulette_freespins + 1 WHERE user_id = $2", cost, int(user_id))
-                return True
-        if run_async(do_buy()): return jsonify({"success": True})
-        else: return jsonify({"error": "Мало монет"}), 400
-        
-    elif item == "bonus10":
-        cost = 300
-        async def do_buy():
-            pool = await asyncpg.create_pool(DB_URL, max_size=2)
-            async with pool.acquire() as db:
-                row = await db.fetchrow("SELECT coins FROM users WHERE user_id = $1", int(user_id))
-                if not row or (row['coins'] or 0) < cost: return False
+            elif reward_type == "bonus":
                 await db.execute("UPDATE users SET coins = coins - $1, pending_deposit_bonus = pending_deposit_bonus + 10 WHERE user_id = $2", cost, int(user_id))
-                return True
-        if run_async(do_buy()): return jsonify({"success": True})
-        else: return jsonify({"error": "Мало монет"}), 400
-        
-    elif item == "energy":
-        cost = 500
-        async def do_buy():
-            pool = await asyncpg.create_pool(DB_URL, max_size=2)
-            async with pool.acquire() as db:
-                row = await db.fetchrow("SELECT coins FROM users WHERE user_id = $1", int(user_id))
-                if not row or (row['coins'] or 0) < cost: return False
+            elif reward_type == "energy":
                 await db.execute("UPDATE users SET coins = coins - $1, energy_limit = energy_limit + 20 WHERE user_id = $2", cost, int(user_id))
-                return True
-        if run_async(do_buy()): return jsonify({"success": True})
+            return True
+
+    if item == "freespin":
+        if run_async(do_buy(100, "freespin")): return jsonify({"success": True})
+        else: return jsonify({"error": "Мало монет"}), 400
+    elif item == "bonus10":
+        if run_async(do_buy(300, "bonus")): return jsonify({"success": True})
+        else: return jsonify({"error": "Мало монет"}), 400
+    elif item == "energy":
+        if run_async(do_buy(500, "energy")): return jsonify({"success": True})
         else: return jsonify({"error": "Мало монет"}), 400
 
     return jsonify({"error": "Товар не найден"}), 400
 
-# --- ПЛАТЕЖИ XROCKET ---
+# --- ПЛАТЕЖИ XROCKET (ОПЛАТА) ---
 @app.route("/api/topup", methods=["GET", "POST"])
 def api_topup():
     user_id = get_telegram_user_id()
