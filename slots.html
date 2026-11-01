@@ -12,13 +12,11 @@
         .back-btn { background: #333; color: white; border: none; padding: 8px 15px; border-radius: 10px; font-weight: bold; cursor: pointer; }
         h1 { font-size: 22px; color: #ffcc00; margin: 60px 0 5px 0; text-shadow: 0 0 10px rgba(255, 204, 0, 0.5); }
         .balance { font-size: 18px; color: #00ff00; font-weight: 700; margin-bottom: 15px; }
-
         .slot-machine { background: #1a1a1a; border: 3px solid #ffcc00; border-radius: 15px; padding: 10px; width: 100%; max-width: 360px; box-sizing: border-box; box-shadow: 0 10px 30px rgba(0,0,0,0.8); }
         .reels-grid { display: flex; justify-content: space-between; gap: 4px; }
         .reel-column { flex: 1; background: #fff; border-radius: 5px; height: 210px; overflow: hidden; position: relative; box-shadow: inset 0 10px 10px -10px rgba(0,0,0,0.8), inset 0 -10px 10px -10px rgba(0,0,0,0.8); }
         .reel-strip { position: absolute; top: 0; left: 0; width: 100%; display: flex; flex-direction: column; }
         .symbol { font-size: 35px; height: 70px; display: flex; align-items: center; justify-content: center; }
-
         .controls { margin-top: 15px; width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 10px; }
         .row { display: flex; justify-content: space-between; align-items: center; background: #1a1a1a; padding: 10px 15px; border-radius: 10px; border: 1px solid #333; }
         .row button { background: #444; color: #fff; border: none; width: 30px; height: 30px; border-radius: 5px; font-size: 18px; cursor: pointer; }
@@ -26,7 +24,6 @@
         .spin-btn { background: linear-gradient(180deg, #ffcc00 0%, #ff8800 100%); color: #000; border: none; padding: 15px; font-size: 20px; font-weight: 900; border-radius: 10px; cursor: pointer; text-transform: uppercase; box-shadow: 0 5px 0 #aa5500; transition: all 0.1s; margin-top: 5px; }
         .spin-btn:active { transform: translateY(5px); box-shadow: 0 0 0 #aa5500; }
         .spin-btn:disabled { background: #555; color: #888; box-shadow: 0 5px 0 #333; transform: translateY(5px); }
-
         #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: none; justify-content: center; align-items: center; z-index: 100; flex-direction: column; }
         #overlay.show { display: flex; }
         .win-box { background: #111; border: 3px solid #ffcc00; padding: 30px; border-radius: 20px; text-align: center; animation: pop 0.3s ease-out; }
@@ -39,51 +36,29 @@
     <div class="header">
         <button class="back-btn" onclick="goBack()">⬅️ Назад</button>
     </div>
-
     <h1>🎰 DELUXE SLOTS</h1>
     <div class="balance">Баланс: <span id="balance-val">...</span> USDT</div>
-
-    <div class="slot-machine">
-        <div class="reels-grid" id="grid"></div>
-    </div>
-
+    <div class="slot-machine"><div class="reels-grid" id="grid"></div></div>
     <div class="controls">
         <div class="row">
             <span>Ставка (на линию):</span>
-            <div>
-                <button onclick="changeBet('line', -0.01)">-</button>
-                <input type="number" id="betLine" value="0.01" readonly>
-                <button onclick="changeBet('line', 0.01)">+</button>
-            </div>
+            <div><button onclick="changeBet('line', -0.01)">-</button><input type="number" id="betLine" value="0.01" readonly><button onclick="changeBet('line', 0.01)">+</button></div>
         </div>
         <div class="row">
             <span>Линии (1-3):</span>
-            <div>
-                <button onclick="changeBet('lines', -1)">-</button>
-                <input type="number" id="linesCount" value="1" readonly>
-                <button onclick="changeBet('lines', 1)">+</button>
-            </div>
+            <div><button onclick="changeBet('lines', -1)">-</button><input type="number" id="linesCount" value="1" readonly><button onclick="changeBet('lines', 1)">+</button></div>
         </div>
         <div style="color:#aaa; font-size:14px;">Итого ставка: <b id="totalBet" style="color:#ffcc00;">0.01</b> USDT</div>
-        
         <button class="spin-btn" id="spinBtn" onclick="spin()">Крутить</button>
         <div style="font-size: 14px; color: #ffcc00; margin-top: 5px; font-weight:bold;" id="freespinStatus"></div>
     </div>
-
-    <div id="overlay" onclick="closeOverlay()">
-        <div class="win-box">
-            <div class="win-text" id="winAmount">+0.00 USDT</div>
-            <div class="freespin-text" id="winFree" style="display:none;">+10 ФРИСПИНОВ!</div>
-        </div>
-    </div>
+    <div id="overlay" onclick="closeOverlay()"><div class="win-box"><div class="win-text" id="winAmount">+0.00 USDT</div><div class="freespin-text" id="winFree" style="display:none;">+10 ФРИСПИНОВ!</div></div></div>
 
     <script>
         const API_URL = "https://bread-casino-14.onrender.com";
-        
         const SYMBOLS = ["🍒", "🍋", "🍇", "🔔", "⭐", "💎", "7️⃣"];
         const REELS = 5;
         const SYMBOLS_PER_REEL = 15;
-        
         let balance = 0.00;
         let userId = null;
         let isSpinning = false;
@@ -92,41 +67,57 @@
         let linesCount = 1;
         let reelStrips = [];
 
-        // ФИКС ДЛЯ TELEGRAM: получаем ID из WebApp или ссылки
+        // УЛУЧШЕННОЕ ПОЛУЧЕНИЕ ID
         function getUserId() {
-            const tg = window.Telegram?.WebApp;
-            if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) return tg.initDataUnsafe.user.id;
+            // 1. Проверяем Telegram WebApp
+            if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe && window.Telegram.WebApp.initDataUnsafe.user) {
+                return window.Telegram.WebApp.initDataUnsafe.user.id;
+            }
+            // 2. Проверяем URL (если открыто в браузере)
             const urlParams = new URLSearchParams(window.location.search);
-            if (urlParams.has('id')) return urlParams.get('id');
+            if (urlParams.has('id')) {
+                return urlParams.get('id');
+            }
+            // 3. Проверяем localStorage
             return localStorage.getItem('tg_user_id') || null;
         }
 
         const tg = window.Telegram.WebApp;
-        tg.ready(); tg.expand();
+        tg.ready(); 
+        tg.expand();
 
         userId = getUserId();
+        
         if (userId) {
+            console.log("User ID найден:", userId);
             fetchBalance();
         } else {
-            document.getElementById('balance-val').innerText = "Ошибка авторизации";
+            console.error("User ID не найден!");
+            document.getElementById('balance-val').innerText = "Ошибка ID";
         }
 
-        function goBack() { 
-            if (window.Telegram && window.Telegram.WebApp) {
-                window.location.href = 'index.html'; 
-            } else {
-                window.location.href = 'index.html';
-            }
-        }
+        function goBack() { window.location.href = 'index.html'; }
 
         function fetchBalance() {
+            console.log("Запрос баланса для ID:", userId);
             fetch(API_URL + '/api/balance?user_id=' + userId)
-            .then(res => res.json())
+            .then(res => {
+                if (!res.ok) throw new Error("Сервер вернул ошибку " + res.status);
+                return res.json();
+            })
             .then(data => {
+                console.log("Ответ от сервера:", data);
+                if(data.error) {
+                    document.getElementById('balance-val').innerText = "Ошибка: " + data.error;
+                    return;
+                }
                 balance = data.balance || 0;
                 updateBalanceUI();
             })
-            .catch(() => { document.getElementById('balance-val').innerText = "Ошибка сети"; });
+            .catch(err => {
+                console.error("Ошибка сети:", err);
+                document.getElementById('balance-val').innerText = "Ошибка сети";
+            });
         }
 
         function updateBalanceUI() {
@@ -167,12 +158,9 @@
             document.getElementById('totalBet').innerText = (betLine * linesCount).toFixed(2);
         }
 
-        // --- ИГРА ---
         function spin() {
             if (isSpinning || !userId) return;
-            
             let totalBet = parseFloat((betLine * linesCount).toFixed(2));
-            
             if (freespinsLeft === 0) {
                 if (balance < totalBet) { alert("Недостаточно средств!"); return; }
                 balance -= totalBet;
@@ -187,71 +175,38 @@
 
             fetch(API_URL + '/api/slots?user_id=' + userId, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    bet: totalBet, 
-                    bet_line: betLine,
-                    lines: linesCount,
-                    is_freespin: (freespinsLeft > 0 || document.getElementById('spinBtn').innerText.includes('Бесплатно')) 
-                })
+                body: JSON.stringify({ bet: totalBet, bet_line: betLine, lines: linesCount, is_freespin: (freespinsLeft > 0) })
             })
             .then(res => res.json())
             .then(data => {
-                if (data.error) {
-                    alert(data.error);
-                    isSpinning = false;
-                    document.getElementById('spinBtn').disabled = false;
-                    return;
-                }
-
+                if (data.error) { alert(data.error); isSpinning = false; document.getElementById('spinBtn').disabled = false; return; }
                 const resultGrid = data.grid; 
-                
                 for (let c = 0; c < REELS; c++) {
-                    let targetSym = resultGrid[1][c]; 
-                    animateReel(reelStrips[c], targetSym, 1000 + (c * 300));
+                    animateReel(reelStrips[c], resultGrid[1][c], 1000 + (c * 300));
                 }
-
                 setTimeout(() => {
                     balance = data.balance;
                     updateBalanceUI();
-                    
-                    if (data.freespins_won > 0) {
-                        freespinsLeft += data.freespins_won;
-                        updateFreespinUI();
-                        showOverlay(data.win, data.freespins_won);
-                        playSound('win');
-                    } else if (data.win > 0) {
-                        showOverlay(data.win, 0);
-                        playSound('win');
-                    } else {
-                        playSound('lose');
-                    }
+                    if (data.freespins_won > 0) { freespinsLeft += data.freespins_won; updateFreespinUI(); showOverlay(data.win, data.freespins_won); playSound('win'); } 
+                    else if (data.win > 0) { showOverlay(data.win, 0); playSound('win'); } 
+                    else { playSound('lose'); }
                     isSpinning = false;
                     document.getElementById('spinBtn').disabled = false;
                 }, 2600); 
             })
-            .catch(err => {
-                alert("Ошибка сети. Проверьте соединение.");
-                isSpinning = false;
-                document.getElementById('spinBtn').disabled = false;
-            });
+            .catch(err => { alert("Ошибка сети при игре."); isSpinning = false; document.getElementById('spinBtn').disabled = false; });
         }
 
         function animateReel(strip, targetSym, duration) {
             const children = strip.children;
             let targetIdx = 0;
             for (let i = 0; i < children.length; i++) {
-                if (children[i].innerText === targetSym) {
-                    targetIdx = i;
-                    if(i > 5) break; 
-                }
+                if (children[i].innerText === targetSym) { targetIdx = i; if(i > 5) break; }
             }
             const h = 70; 
             const finalY = -(targetIdx - 1) * h;
-            strip.style.transition = 'none';
-            strip.style.transform = `translateY(0px)`;
-            void strip.offsetWidth;
-            strip.style.transition = `transform ${duration}ms cubic-bezier(0.1, 0.7, 0.1, 1)`;
-            strip.style.transform = `translateY(${finalY}px)`;
+            strip.style.transition = 'none'; strip.style.transform = `translateY(0px)`; void strip.offsetWidth;
+            strip.style.transition = `transform ${duration}ms cubic-bezier(0.1, 0.7, 0.1, 1)`; strip.style.transform = `translateY(${finalY}px)`;
         }
 
         function updateFreespinUI() {
@@ -260,55 +215,31 @@
                 status.innerText = `🔥 ФРИСПИНЫ: ${freespinsLeft} (x2)`;
                 document.getElementById('spinBtn').innerText = 'КРУТИТЬ БЕСПЛАТНО';
                 document.getElementById('spinBtn').style.background = '#00c853';
-                document.getElementById('spinBtn').style.boxShadow = '0 5px 0 #007700';
             } else {
                 status.innerText = '';
                 document.getElementById('spinBtn').innerText = 'КРУТИТЬ';
                 document.getElementById('spinBtn').style.background = 'linear-gradient(180deg, #ffcc00 0%, #ff8800 100%)';
-                document.getElementById('spinBtn').style.boxShadow = '0 5px 0 #aa5500';
             }
         }
 
         function showOverlay(winAmount, freespinsWon) {
             const overlay = document.getElementById('overlay');
-            const winText = document.getElementById('winAmount');
+            document.getElementById('winAmount').innerText = `+${winAmount.toFixed(2)} USDT`;
             const freeText = document.getElementById('winFree');
-
-            if (freespinsWon > 0) {
-                winText.innerText = `+${winAmount.toFixed(2)} USDT`;
-                freeText.style.display = 'block';
-                freeText.innerText = `+${freespinsWon} ФРИСПИНОВ!`;
-            } else {
-                winText.innerText = `+${winAmount.toFixed(2)} USDT`;
-                freeText.style.display = 'none';
-            }
+            if (freespinsWon > 0) { freeText.style.display = 'block'; freeText.innerText = `+${freespinsWon} ФРИСПИНОВ!`; } 
+            else { freeText.style.display = 'none'; }
             overlay.classList.add('show');
         }
-
-        function closeOverlay() {
-            document.getElementById('overlay').classList.remove('show');
-        }
+        function closeOverlay() { document.getElementById('overlay').classList.remove('show'); }
 
         const AudioContext = window.AudioContext || window.webkitAudioContext;
         const audioCtx = new AudioContext();
         function playSound(type) {
             if (audioCtx.state === 'suspended') audioCtx.resume();
-            const osc = audioCtx.createOscillator();
-            const gain = audioCtx.createGain();
+            const osc = audioCtx.createOscillator(); const gain = audioCtx.createGain();
             osc.connect(gain); gain.connect(audioCtx.destination);
-            if (type === 'win') {
-                osc.type = 'triangle'; osc.frequency.setValueAtTime(440, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.2);
-                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5);
-                osc.start(); osc.stop(audioCtx.currentTime + 0.5);
-            } else {
-                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, audioCtx.currentTime);
-                osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.3);
-                gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
-                gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
-                osc.start(); osc.stop(audioCtx.currentTime + 0.3);
-            }
+            if (type === 'win') { osc.type = 'triangle'; osc.frequency.setValueAtTime(440, audioCtx.currentTime); osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.2); gain.gain.setValueAtTime(0.1, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.5); osc.start(); osc.stop(audioCtx.currentTime + 0.5); } 
+            else { osc.type = 'sawtooth'; osc.frequency.setValueAtTime(150, audioCtx.currentTime); osc.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.3); gain.gain.setValueAtTime(0.1, audioCtx.currentTime); gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3); osc.start(); osc.stop(audioCtx.currentTime + 0.3); }
         }
     </script>
 </body>
