@@ -85,7 +85,6 @@
         
         let gameActive = false;
         let openedCells = 0;
-        let totalCells = 25;
         
         const tg = window.Telegram.WebApp;
         tg.ready(); tg.expand();
@@ -110,22 +109,24 @@
             btn.classList.add('active');
         }
 
-        function calcMultiplier(opened, mines) {
-            if (opened === 0) return 1.0;
-            let mult = 1.0;
-            for (let i = 0; i < opened; i++) {
-                mult *= (totalCells - i) / (totalCells - mines - i);
-            }
-            return mult * 0.97;
-        }
-
         async function startGame() {
             currentBet = parseFloat(document.getElementById('betAmount').value);
             if (currentBet < 0.05) return alert("Минимальная ставка 0.05");
             if (currentBet > balance) return alert("Недостаточно средств!");
 
-            balance -= currentBet;
-            document.getElementById('balance-display').innerText = balance.toFixed(2);
+            // Отправляем запрос на сервер для старта
+            try {
+                const res = await fetch(API_URL + '/api/mines/start', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ user_id: userId, bet: currentBet, mines: currentMines })
+                });
+                const data = await res.json();
+                if (data.error) return alert(data.error);
+                
+                balance = data.real + data.bonus;
+                document.getElementById('balance-display').innerText = balance.toFixed(2);
+            } catch (e) { alert("Ошибка сервера"); return; }
 
             gameActive = true;
             openedCells = 0;
@@ -133,80 +134,72 @@
             document.getElementById('gameArea').style.display = 'flex';
             document.getElementById('stat-bet').innerText = currentBet.toFixed(2);
             document.getElementById('cashoutBtn').style.display = 'none';
-            updateUI();
+            document.getElementById('stat-mult').innerText = 'x1.00';
+            document.getElementById('stat-win').innerText = currentBet.toFixed(2);
 
             const grid = document.getElementById('grid');
             grid.innerHTML = '';
             
-            let bombs = [];
-            while(bombs.length < currentMines) {
-                let r = Math.floor(Math.random() * 25);
-                if(!bombs.includes(r)) bombs.push(r);
-            }
-
             for (let i = 0; i < 25; i++) {
                 const cell = document.createElement('div');
                 cell.className = 'cell';
-                cell.onclick = () => openCell(cell, i, bombs);
+                cell.onclick = () => openCell(cell, i);
                 grid.appendChild(cell);
             }
         }
 
-        function openCell(cell, index, bombs) {
+        async function openCell(cell, index) {
             if (!gameActive || cell.classList.contains('disabled')) return;
             cell.classList.add('disabled');
 
-            if (bombs.includes(index)) {
-                cell.innerText = '💥';
-                cell.classList.add('bomb');
-                gameActive = false;
-                
-                const cells = document.querySelectorAll('.cell');
-                cells.forEach((c, i) => {
-                    if (bombs.includes(i)) {
-                        c.innerText = '💣';
-                        c.classList.add('bomb');
-                    }
+            // Спрашиваем сервер, есть ли тут бомба
+            try {
+                const res = await fetch(API_URL + '/api/mines/open', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ user_id: userId, cell: index })
                 });
+                const data = await res.json();
                 
-                document.getElementById('cashoutBtn').style.display = 'none';
-                setTimeout(() => {
-                    alert("💥 БУМ! Вы проиграли " + currentBet + " USDT");
-                    resetGame();
-                }, 1000);
-
-            } else {
-                cell.innerText = '💎';
-                cell.classList.add('safe');
-                openedCells++;
-                updateUI();
-            }
+                if (data.bomb) {
+                    cell.innerText = '💥';
+                    cell.classList.add('bomb');
+                    gameActive = false;
+                    document.getElementById('cashoutBtn').style.display = 'none';
+                    setTimeout(() => {
+                        alert("💥 БУМ! Вы проиграли " + currentBet + " USDT");
+                        resetGame();
+                    }, 1000);
+                } else {
+                    cell.innerText = '💎';
+                    cell.classList.add('safe');
+                    openedCells++;
+                    document.getElementById('stat-mult').innerText = 'x' + data.mult.toFixed(2);
+                    document.getElementById('stat-win').innerText = data.win.toFixed(2);
+                    document.getElementById('cashoutBtn').style.display = 'block';
+                    document.getElementById('cashout-amount').innerText = data.win.toFixed(2);
+                }
+            } catch (e) { console.log(e); }
         }
 
-        function updateUI() {
-            let mult = calcMultiplier(openedCells, currentMines);
-            let potentialWin = currentBet * mult;
-            
-            document.getElementById('stat-mult').innerText = 'x' + mult.toFixed(2);
-            document.getElementById('stat-win').innerText = potentialWin.toFixed(2);
-            
-            if (openedCells > 0) {
-                document.getElementById('cashoutBtn').style.display = 'block';
-                document.getElementById('cashout-amount').innerText = potentialWin.toFixed(2);
-            }
-        }
-
-        function cashout() {
+        async function cashout() {
             if (!gameActive || openedCells === 0) return;
             gameActive = false;
             
-            let mult = calcMultiplier(openedCells, currentMines);
-            let winAmount = currentBet * mult;
-            
-            balance += winAmount;
-            document.getElementById('balance-display').innerText = balance.toFixed(2);
-            
-            alert(`🎉 Вы забрали ${winAmount.toFixed(2)} USDT!`);
+            try {
+                const res = await fetch(API_URL + '/api/mines/cashout', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ user_id: userId })
+                });
+                const data = await res.json();
+                if (data.error) alert(data.error);
+                else {
+                    balance = data.real + data.bonus;
+                    document.getElementById('balance-display').innerText = balance.toFixed(2);
+                    alert(`🎉 Вы забрали ${data.win.toFixed(2)} USDT!`);
+                }
+            } catch (e) { console.log(e); }
             resetGame();
         }
 
