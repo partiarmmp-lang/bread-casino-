@@ -214,7 +214,7 @@ async def transfer_between_users(from_id, to_id, amount: float) -> bool:
         if res != "UPDATE 1": return False
         await db.execute("UPDATE users SET balance = balance + $1 WHERE user_id = $2", amount, _uid(to_id))
         return True
-        async def set_referrer_full(user_id, lvl1_id):
+    async def set_referrer_full(user_id, lvl1_id):
     pool = await get_pool()
     async with pool.acquire() as db:
         await db.execute("INSERT INTO users (user_id, balance) VALUES ($1, 0.0) ON CONFLICT DO NOTHING", _uid(user_id))
